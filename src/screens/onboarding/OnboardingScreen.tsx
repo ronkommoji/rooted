@@ -13,8 +13,9 @@ import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useTheme } from '../../theme/ThemeContext';
 import { Input, Button, Card } from '../../components';
 import { useAppStore } from '../../store/useAppStore';
+import { requestNotificationPermissions } from '../../lib/notifications';
 
-type OnboardingStep = 'choice' | 'create' | 'join';
+type OnboardingStep = 'choice' | 'create' | 'join' | 'notifications';
 
 export const OnboardingScreen: React.FC = () => {
   const { colors } = useTheme();
@@ -36,6 +37,8 @@ export const OnboardingScreen: React.FC = () => {
     try {
       await createGroup(groupName.trim(), groupDescription.trim() || undefined);
       await fetchGroupMembers();
+      // Move to notification permission step
+      setStep('notifications');
     } catch (error: any) {
       Alert.alert('Error', error.message || 'Failed to create group');
     } finally {
@@ -53,11 +56,40 @@ export const OnboardingScreen: React.FC = () => {
     try {
       await joinGroup(inviteCode.trim());
       await fetchGroupMembers();
+      // Move to notification permission step
+      setStep('notifications');
     } catch (error: any) {
       Alert.alert('Error', error.message || 'Failed to join group');
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleRequestNotifications = async () => {
+    setLoading(true);
+    try {
+      const hasPermission = await requestNotificationPermissions();
+      if (hasPermission) {
+        // User granted permission, onboarding is complete
+        // The app will automatically navigate to MainNavigator since currentGroup is now set
+      } else {
+        Alert.alert(
+          'Notifications Disabled',
+          'You can enable notifications later in Settings to receive reminders and updates.',
+          [{ text: 'OK' }]
+        );
+        // Still continue even if permission denied
+      }
+    } catch (error: any) {
+      console.error('Error requesting notifications:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSkipNotifications = () => {
+    // User can skip, they can enable later in settings
+    // The app will automatically navigate to MainNavigator since currentGroup is now set
   };
 
   const renderChoice = () => (
@@ -198,6 +230,60 @@ export const OnboardingScreen: React.FC = () => {
     </View>
   );
 
+  const renderNotifications = () => (
+    <View style={styles.formContainer}>
+      <View style={styles.formHeader}>
+        <View style={[styles.formIconContainer, { backgroundColor: colors.accent + '40' }]}>
+          <Ionicons name="notifications" size={32} color={colors.primary} />
+        </View>
+        <Text style={[styles.formTitle, { color: colors.text }]}>
+          Stay Connected
+        </Text>
+        <Text style={[styles.formSubtitle, { color: colors.textSecondary }]}>
+          Enable notifications to receive daily devotional reminders, prayer updates, and event alerts from your group.
+        </Text>
+      </View>
+
+      <View style={styles.form}>
+        <Card style={[styles.infoCard, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
+          <View style={styles.infoRow}>
+            <Ionicons name="book-outline" size={20} color={colors.primary} />
+            <Text style={[styles.infoText, { color: colors.textSecondary }]}>
+              Daily devotional reminders
+            </Text>
+          </View>
+          <View style={styles.infoRow}>
+            <Ionicons name="hands-pray" size={20} color={colors.primary} />
+            <Text style={[styles.infoText, { color: colors.textSecondary }]}>
+              Prayer request updates
+            </Text>
+          </View>
+          <View style={styles.infoRow}>
+            <Ionicons name="calendar-outline" size={20} color={colors.primary} />
+            <Text style={[styles.infoText, { color: colors.textSecondary }]}>
+              Event reminders and alerts
+            </Text>
+          </View>
+        </Card>
+
+        <Button
+          title="Enable Notifications"
+          onPress={handleRequestNotifications}
+          loading={loading}
+          fullWidth
+          style={{ marginTop: 24 }}
+        />
+
+        <Button
+          title="Maybe Later"
+          variant="ghost"
+          onPress={handleSkipNotifications}
+          style={styles.backButton}
+        />
+      </View>
+    </View>
+  );
+
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
       <KeyboardAvoidingView 
@@ -211,6 +297,7 @@ export const OnboardingScreen: React.FC = () => {
           {step === 'choice' && renderChoice()}
           {step === 'create' && renderCreateGroup()}
           {step === 'join' && renderJoinGroup()}
+          {step === 'notifications' && renderNotifications()}
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -314,5 +401,20 @@ const styles = StyleSheet.create({
   },
   backButton: {
     marginTop: 12,
+  },
+  infoCard: {
+    padding: 16,
+    borderWidth: 1,
+    marginBottom: 8,
+  },
+  infoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+    gap: 12,
+  },
+  infoText: {
+    fontSize: 14,
+    flex: 1,
   },
 });

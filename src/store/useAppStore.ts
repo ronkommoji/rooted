@@ -18,6 +18,7 @@ interface AppState {
   // Group
   currentGroup: Group | null;
   groupMembers: GroupMemberWithProfile[];
+  currentUserRole: 'admin' | 'member' | null;
   
   // Preferences
   preferences: UserPreferences | null;
@@ -41,6 +42,10 @@ interface AppState {
   // Onboarding
   createGroup: (name: string, description?: string) => Promise<Group>;
   joinGroup: (inviteCode: string) => Promise<Group>;
+  
+  // Group management
+  updateGroupName: (name: string) => Promise<void>;
+  leaveGroup: () => Promise<void>;
 }
 
 export const useAppStore = create<AppState>((set, get) => ({
@@ -49,6 +54,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   isLoading: true,
   currentGroup: null,
   groupMembers: [],
+  currentUserRole: null,
   preferences: null,
 
   setSession: (session) => set({ session }),
@@ -77,16 +83,16 @@ export const useAppStore = create<AppState>((set, get) => ({
     const { session } = get();
     if (!session?.user?.id) return;
 
-    // Get the user's first group membership
+    // Get the user's first group membership with role
     const { data: membership, error: memberError } = await supabase
       .from('group_members')
-      .select('group_id')
+      .select('group_id, role')
       .eq('user_id', session.user.id)
       .limit(1)
       .single();
 
     if (memberError || !membership) {
-      set({ currentGroup: null });
+      set({ currentGroup: null, currentUserRole: null });
       return;
     }
 
@@ -97,7 +103,10 @@ export const useAppStore = create<AppState>((set, get) => ({
       .single();
 
     if (group && !error) {
-      set({ currentGroup: group });
+      set({ 
+        currentGroup: group,
+        currentUserRole: membership.role as 'admin' | 'member' | null
+      });
     }
   },
 
@@ -156,6 +165,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       profile: null, 
       currentGroup: null, 
       groupMembers: [],
+      currentUserRole: null,
       preferences: null 
     });
   },
@@ -276,6 +286,54 @@ export const useAppStore = create<AppState>((set, get) => ({
 
     set({ currentGroup: fullGroup });
     return fullGroup;
+  },
+
+  updateGroupName: async (name) => {
+    const { currentGroup, currentUserRole } = get();
+    if (!currentGroup?.id) throw new Error('No group selected');
+    if (currentUserRole !== 'admin') throw new Error('Only admins can update the group name');
+
+    const { data, error } = await supabase
+      .from('groups')
+      .update({ 
+        name: name.trim(),
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', currentGroup.id)
+      .select()
+      .single();
+
+    if (error) {
+      throw new Error(error.message || 'Failed to update group name');
+    }
+
+    if (data) {
+      set({ currentGroup: data });
+    }
+  },
+
+  leaveGroup: async () => {
+    const { session, currentGroup } = get();
+    if (!session?.user?.id) throw new Error('Not authenticated');
+    if (!currentGroup?.id) throw new Error('No group selected');
+
+    // Delete the user's membership
+    const { error } = await supabase
+      .from('group_members')
+      .delete()
+      .eq('group_id', currentGroup.id)
+      .eq('user_id', session.user.id);
+
+    if (error) {
+      throw new Error(error.message || 'Failed to leave group');
+    }
+
+    // Clear group state - user will be redirected to onboarding
+    set({ 
+      currentGroup: null,
+      groupMembers: [],
+      currentUserRole: null
+    });
   },
 }));
 

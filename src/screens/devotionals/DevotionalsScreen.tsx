@@ -210,7 +210,7 @@ export const DevotionalsScreen: React.FC = () => {
                     ? () => deleteDevotional(submission.devotionalId!)
                     : undefined
                 }
-                isLiked={false} // Will be managed by the hook
+                isLiked={submission.isLiked}
               />
             ))
           )}

@@ -11,6 +11,7 @@ export interface MemberSubmission {
   createdAt: string | null;
   likes: number;
   devotionalId?: string;
+  isLiked?: boolean;
 }
 
 interface StoryRowProps {

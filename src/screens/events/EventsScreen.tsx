@@ -21,6 +21,7 @@ import { supabase } from '../../lib/supabase';
 import { Event } from '../../types/database';
 import { format, parseISO } from 'date-fns';
 import DateTimePicker from '@react-native-community/datetimepicker';
+import { useNotifications } from '../../hooks/useNotifications';
 
 type EventWithRsvps = Event & {
   rsvp_counts: { yes: number; no: number };
@@ -30,6 +31,7 @@ type EventWithRsvps = Event & {
 export const EventsScreen: React.FC = () => {
   const { colors } = useTheme();
   const { currentGroup, session } = useAppStore();
+  const { scheduleEventNotifications, cancelEventNotifications } = useNotifications();
   
   const [filter, setFilter] = useState<'Upcoming' | 'Past'>('Upcoming');
   const [events, setEvents] = useState<EventWithRsvps[]>([]);
@@ -177,7 +179,7 @@ export const EventsScreen: React.FC = () => {
 
     setCreating(true);
     try {
-      const { error } = await supabase
+      const { data: newEvent, error } = await supabase
         .from('events')
         .insert({
           group_id: currentGroup.id,
@@ -187,9 +189,21 @@ export const EventsScreen: React.FC = () => {
           location: eventLocation.trim() || null,
           address: eventAddress.trim() || null,
           description: eventNotes.trim() || null,
-        });
+        })
+        .select()
+        .single();
 
       if (error) throw error;
+
+      // Schedule event notifications
+      if (newEvent && newEvent.event_date) {
+        await scheduleEventNotifications(
+          newEvent.id,
+          newEvent.title,
+          parseISO(newEvent.event_date),
+          newEvent.location || undefined
+        );
+      }
 
       resetCreateModal();
       fetchEvents();
@@ -237,7 +251,10 @@ export const EventsScreen: React.FC = () => {
 
     setUpdating(true);
     try {
-      const { error } = await supabase
+      // Cancel old notifications
+      await cancelEventNotifications(editingEvent.id);
+
+      const { data: updatedEvent, error } = await supabase
         .from('events')
         .update({
           title: editEventTitle.trim(),
@@ -247,9 +264,21 @@ export const EventsScreen: React.FC = () => {
           description: editEventNotes.trim() || null,
           updated_at: new Date().toISOString(),
         })
-        .eq('id', editingEvent.id);
+        .eq('id', editingEvent.id)
+        .select()
+        .single();
 
       if (error) throw error;
+
+      // Schedule new notifications with updated event data
+      if (updatedEvent && updatedEvent.event_date) {
+        await scheduleEventNotifications(
+          updatedEvent.id,
+          updatedEvent.title,
+          parseISO(updatedEvent.event_date),
+          updatedEvent.location || undefined
+        );
+      }
 
       resetEditModal();
       fetchEvents();
@@ -285,6 +314,9 @@ export const EventsScreen: React.FC = () => {
           style: 'destructive',
           onPress: async () => {
             try {
+              // Cancel event notifications
+              await cancelEventNotifications(selectedEvent.id);
+
               // Delete RSVPs first
               await supabase
                 .from('event_rsvps')

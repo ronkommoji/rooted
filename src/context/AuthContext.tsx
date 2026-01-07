@@ -27,24 +27,40 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   useEffect(() => {
     // Get initial session
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    const initializeAuth = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
       setSession(session);
       if (session) {
-        fetchProfile();
-        fetchCurrentGroup();
-        fetchPreferences();
+        // Await all fetches before setting loading to false
+        await Promise.all([
+          fetchProfile(),
+          fetchCurrentGroup(),
+          fetchPreferences()
+        ]);
       }
       setLoading(false);
-    });
+    };
+    
+    initializeAuth();
 
     // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (_event, session) => {
-        setSession(session);
+        // Set loading true BEFORE updating session to prevent flash
         if (session) {
-          await fetchProfile();
-          await fetchCurrentGroup();
-          await fetchPreferences();
+          setLoading(true);
+        }
+        
+        setSession(session);
+        
+        if (session) {
+          // Fetch all user data before showing the app
+          await Promise.all([
+            fetchProfile(),
+            fetchCurrentGroup(),
+            fetchPreferences()
+          ]);
+          setLoading(false);
         }
       }
     );

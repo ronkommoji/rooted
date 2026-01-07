@@ -550,6 +550,8 @@ export type Database = {
         Row: {
           created_at: string | null
           devotional_reminders: boolean | null
+          devotional_reminder_hour: number | null
+          devotional_reminder_minute: number | null
           event_alerts: boolean | null
           id: string
           prayer_notifications: boolean | null
@@ -560,6 +562,8 @@ export type Database = {
         Insert: {
           created_at?: string | null
           devotional_reminders?: boolean | null
+          devotional_reminder_hour?: number | null
+          devotional_reminder_minute?: number | null
           event_alerts?: boolean | null
           id?: string
           prayer_notifications?: boolean | null
@@ -570,6 +574,8 @@ export type Database = {
         Update: {
           created_at?: string | null
           devotional_reminders?: boolean | null
+          devotional_reminder_hour?: number | null
+          devotional_reminder_minute?: number | null
           event_alerts?: boolean | null
           id?: string
           prayer_notifications?: boolean | null

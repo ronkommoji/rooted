@@ -18,6 +18,7 @@ import { Card, Avatar, Header, PillToggle, Button, Input, EmptyState } from '../
 import { useAppStore } from '../../store/useAppStore';
 import { supabase } from '../../lib/supabase';
 import { Prayer, Profile } from '../../types/database';
+import { useNotifications } from '../../hooks/useNotifications';
 
 type PrayerWithDetails = Prayer & { 
   profiles: Profile;
@@ -28,6 +29,7 @@ type PrayerWithDetails = Prayer & {
 export const PrayerWallScreen: React.FC = () => {
   const { colors } = useTheme();
   const { currentGroup, profile, session } = useAppStore();
+  const { sendPrayerNotification } = useNotifications();
   
   const [filter, setFilter] = useState<'Requests' | 'Answered'>('Requests');
   const [prayers, setPrayers] = useState<PrayerWithDetails[]>([]);
@@ -102,6 +104,8 @@ export const PrayerWallScreen: React.FC = () => {
   const handlePray = async (prayer: PrayerWithDetails) => {
     if (!session?.user?.id) return;
 
+    const wasAlreadyPrayed = prayer.user_prayed;
+
     // Optimistic update
     setPrayers(prev => prev.map(p => 
       p.id === prayer.id 
@@ -129,6 +133,14 @@ export const PrayerWallScreen: React.FC = () => {
           ? { ...p, total_prayed: p.total_prayed - 1 }
           : p
       ));
+    } else if (!wasAlreadyPrayed && prayer.user_id !== session.user.id) {
+      // Notify the prayer author that someone prayed for their request
+      // Only if this is the first time this user is praying for it
+      await sendPrayerNotification(
+        '🙏 Someone Prayed for You',
+        `${profile?.full_name || 'Someone'} prayed for "${prayer.title}"`,
+        prayer.id
+      );
     }
   };
 
@@ -155,6 +167,12 @@ export const PrayerWallScreen: React.FC = () => {
               .eq('id', prayer.id);
 
             if (!error) {
+              // Send notification for answered prayer
+              await sendPrayerNotification(
+                '🙏 Prayer Answered!',
+                `"${prayer.title}" has been marked as answered. Praise God!`,
+                prayer.id
+              );
               fetchPrayers();
             }
           },

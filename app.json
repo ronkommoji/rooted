@@ -2,30 +2,51 @@
   "expo": {
     "name": "Rooted",
     "slug": "Rooted",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
+    "icon": "./assets/rootedlogo.png",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
     "splash": {
-      "image": "./assets/splash-icon.png",
+      "image": "./assets/rootedlogo.png",
       "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
+      "backgroundColor": "#E8E4DF"
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.yourname.rooted"
+      "bundleIdentifier": "com.ronkommoji.rooted",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      },
+      "plugins": [
+        [
+          "expo-notifications",
+          {
+            "icon": "./assets/rootedlogo.png",
+            "color": "#3D5A50",
+            "sounds": []
+          }
+        ]
+      ]
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#ffffff"
+        "foregroundImage": "./assets/rootedlogo.png",
+        "backgroundColor": "#E8E4DF"
       },
       "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "permissions": [
+        "RECEIVE_BOOT_COMPLETED"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "a89bfa54-b55b-4597-b84a-45e0123cd4ef"
+      }
     }
   }
 }

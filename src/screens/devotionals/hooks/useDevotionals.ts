@@ -139,9 +139,10 @@ export const useDevotionals = (selectedDate: Date): UseDevotionalsReturn => {
         createdAt: devotional?.created_at || null,
         likes: devotional?.likes_count || 0,
         devotionalId: devotional?.id,
+        isLiked: devotional ? likedDevotionalIds.has(devotional.id) : false,
       };
     });
-  }, [groupMembers, devotionals]);
+  }, [groupMembers, devotionals, likedDevotionalIds]);
 
   // Feed submissions (only those who posted, sorted by most recent)
   const feedSubmissions = useMemo(() => {

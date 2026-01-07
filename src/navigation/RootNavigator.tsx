@@ -4,6 +4,7 @@ import { NavigationContainer } from '@react-navigation/native';
 import { useAuth } from '../context/AuthContext';
 import { useAppStore } from '../store/useAppStore';
 import { useTheme } from '../theme/ThemeContext';
+import { useNotificationContext } from '../context/NotificationContext';
 import { AuthNavigator } from './AuthNavigator';
 import { MainNavigator } from './MainNavigator';
 import { OnboardingScreen } from '../screens/onboarding/OnboardingScreen';
@@ -12,6 +13,7 @@ export const RootNavigator: React.FC = () => {
   const { session, isLoading } = useAuth();
   const { currentGroup } = useAppStore();
   const { colors } = useTheme();
+  const { navigationRef } = useNotificationContext();
 
   if (isLoading) {
     return (
@@ -22,7 +24,7 @@ export const RootNavigator: React.FC = () => {
   }
 
   return (
-    <NavigationContainer>
+    <NavigationContainer ref={navigationRef}>
       {!session ? (
         <AuthNavigator />
       ) : !currentGroup ? (
