@@ -142,7 +142,7 @@ export const PrayerWallScreen: React.FC = () => {
           // Send push notification
           await sendPushNotification(
             prayer.user_id,
-            '🙏 Someone Prayed for You',
+            'Someone Prayed for You 🙏',
             `${profile.full_name} prayed for "${prayer.title}"`,
             {
               type: 'prayer',

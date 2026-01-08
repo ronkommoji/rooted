@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import * as Notifications from 'expo-notifications';
 import { useAppStore } from '../store/useAppStore';
+import { supabase } from '../lib/supabase';
 import {
   requestNotificationPermissions,
   scheduleDevotionalReminder,
@@ -31,9 +32,34 @@ export function useNotifications() {
     initializeNotifications();
 
     // Set up notification listener (only for foreground notifications)
-    notificationListener.current = Notifications.addNotificationReceivedListener((notification) => {
+    notificationListener.current = Notifications.addNotificationReceivedListener(async (notification) => {
       // Handle notification received while app is in foreground
       console.log('Notification received:', notification);
+      
+      // For devotional reminders, check if user has already posted
+      const data = notification.request.content.data as any;
+      if (data?.type === 'devotional' && session?.user?.id) {
+        try {
+          const { currentGroup } = useAppStore.getState();
+          if (currentGroup?.id) {
+            const today = new Date().toISOString().split('T')[0];
+            const { data: devotional } = await supabase
+              .from('devotionals')
+              .select('id')
+              .eq('group_id', currentGroup.id)
+              .eq('user_id', session.user.id)
+              .eq('post_date', today)
+              .single();
+            
+            if (devotional) {
+              console.log('User has already posted devotional today, notification handled gracefully');
+              // Notification handler already prevents banner/sound, so we just log here
+            }
+          }
+        } catch (error) {
+          console.error('Error checking devotional status:', error);
+        }
+      }
     });
 
     return () => {

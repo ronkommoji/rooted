@@ -220,12 +220,9 @@ export const EventsScreen: React.FC = () => {
           .select('user_id, event_alerts')
           .in('user_id', userIds);
 
-        // Send push notification to each member with event_alerts enabled
+        // Send push notification to ALL group members (including creator) with event_alerts enabled
         const notifications = groupMembers
           .filter(member => {
-            // Don't notify the event creator
-            if (member.user_id === session.user.id) return false;
-            
             // Check if user has event_alerts enabled (default to true if not set)
             const userPrefs = preferences?.find(p => p.user_id === member.user_id);
             return userPrefs?.event_alerts !== false;
@@ -233,7 +230,7 @@ export const EventsScreen: React.FC = () => {
           .map(member =>
             sendPushNotification(
               member.user_id,
-              '📅 New Event Created',
+              'New Meeting 📅',
               `${newEvent.title}${newEvent.event_date ? ` on ${format(parseISO(newEvent.event_date), 'MMM d, yyyy')}` : ''}`,
               {
                 type: 'event',
@@ -287,10 +284,15 @@ export const EventsScreen: React.FC = () => {
       return;
     }
 
-    if (!editingEvent) return;
+    if (!editingEvent || !currentGroup?.id || !session?.user?.id) return;
 
     setUpdating(true);
     try {
+      // Check if date/time changed
+      const oldDate = editingEvent.event_date ? parseISO(editingEvent.event_date) : null;
+      const newDate = editEventDate;
+      const dateChanged = oldDate ? oldDate.getTime() !== newDate.getTime() : false;
+
       // Cancel old notifications
       await cancelEventNotifications(editingEvent.id);
 
@@ -320,6 +322,44 @@ export const EventsScreen: React.FC = () => {
         );
       }
 
+      // If date/time changed, notify all group members
+      if (dateChanged) {
+        const { data: groupMembers } = await supabase
+          .from('group_members')
+          .select('user_id')
+          .eq('group_id', currentGroup.id);
+
+        if (groupMembers) {
+          // Get preferences for all members
+          const userIds = groupMembers.map(m => m.user_id);
+          const { data: preferences } = await supabase
+            .from('user_preferences')
+            .select('user_id, event_alerts')
+            .in('user_id', userIds);
+
+          // Send push notification to each member with event_alerts enabled
+          const notifications = groupMembers
+            .filter(member => {
+              // Check if user has event_alerts enabled (default to true if not set)
+              const userPrefs = preferences?.find(p => p.user_id === member.user_id);
+              return userPrefs?.event_alerts !== false;
+            })
+            .map(member =>
+              sendPushNotification(
+                member.user_id,
+                'Event Updated 🔄',
+                `${updatedEvent.title} time changed to ${format(parseISO(updatedEvent.event_date!), 'MMM d, yyyy h:mm a')}`,
+                {
+                  type: 'event',
+                  id: updatedEvent.id,
+                }
+              )
+            );
+
+          await Promise.all(notifications);
+        }
+      }
+
       resetEditModal();
       fetchEvents();
     } catch (error: any) {
@@ -340,7 +380,7 @@ export const EventsScreen: React.FC = () => {
   };
 
   const handleDeleteEvent = () => {
-    if (!selectedEvent) return;
+    if (!selectedEvent || !currentGroup?.id || !session?.user?.id) return;
 
     setShowMenuModal(false);
     
@@ -354,8 +394,46 @@ export const EventsScreen: React.FC = () => {
           style: 'destructive',
           onPress: async () => {
             try {
+              const eventTitle = selectedEvent.title;
+              
               // Cancel event notifications
               await cancelEventNotifications(selectedEvent.id);
+
+              // Notify all group members before deleting
+              const { data: groupMembers } = await supabase
+                .from('group_members')
+                .select('user_id')
+                .eq('group_id', currentGroup.id);
+
+              if (groupMembers) {
+                // Get preferences for all members
+                const userIds = groupMembers.map(m => m.user_id);
+                const { data: preferences } = await supabase
+                  .from('user_preferences')
+                  .select('user_id, event_alerts')
+                  .in('user_id', userIds);
+
+                // Send push notification to each member with event_alerts enabled
+                const notifications = groupMembers
+                  .filter(member => {
+                    // Check if user has event_alerts enabled (default to true if not set)
+                    const userPrefs = preferences?.find(p => p.user_id === member.user_id);
+                    return userPrefs?.event_alerts !== false;
+                  })
+                  .map(member =>
+                    sendPushNotification(
+                      member.user_id,
+                      'Event Cancelled 🗑️',
+                      `${eventTitle} has been cancelled`,
+                      {
+                        type: 'event',
+                        id: selectedEvent.id,
+                      }
+                    )
+                  );
+
+                await Promise.all(notifications);
+              }
 
               // Delete RSVPs first
               await supabase
