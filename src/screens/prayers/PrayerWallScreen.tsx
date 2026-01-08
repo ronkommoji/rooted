@@ -19,6 +19,7 @@ import { useAppStore } from '../../store/useAppStore';
 import { supabase } from '../../lib/supabase';
 import { Prayer, Profile } from '../../types/database';
 import { useNotifications } from '../../hooks/useNotifications';
+import { sendPushNotification } from '../../lib/notifications';
 
 type PrayerWithDetails = Prayer & { 
   profiles: Profile;
@@ -50,6 +51,9 @@ export const PrayerWallScreen: React.FC = () => {
   // Menu state
   const [showMenuModal, setShowMenuModal] = useState(false);
   const [selectedPrayer, setSelectedPrayer] = useState<PrayerWithDetails | null>(null);
+  
+  // Track which prayers are being processed to prevent double-clicks
+  const [processingPrayers, setProcessingPrayers] = useState<Set<string>>(new Set());
 
   const fetchPrayers = useCallback(async () => {
     if (!currentGroup?.id || !session?.user?.id) return;
@@ -68,24 +72,12 @@ export const PrayerWallScreen: React.FC = () => {
       return;
     }
 
-    // Fetch prayer interaction counts
-    const prayersWithDetails = await Promise.all(
-      (prayersData || []).map(async (prayer) => {
-        const { data: interactions } = await supabase
-          .from('prayer_interactions')
-          .select('prayed_count, user_id')
-          .eq('prayer_id', prayer.id);
-
-        const totalPrayed = interactions?.reduce((sum, i) => sum + i.prayed_count, 0) || 0;
-        const userPrayed = interactions?.some(i => i.user_id === session.user.id) || false;
-
-        return {
-          ...prayer,
-          total_prayed: totalPrayed,
-          user_prayed: userPrayed,
-        } as PrayerWithDetails;
-      })
-    );
+    // SIMPLE: Get prayer_count directly from prayers table - no other tables needed!
+    const prayersWithDetails = (prayersData || []).map((prayer) => ({
+      ...prayer,
+      total_prayed: (prayer as any).prayer_count || 0,
+      user_prayed: false, // Not tracking individual users anymore - simplified!
+    })) as PrayerWithDetails[];
 
     setPrayers(prayersWithDetails);
     setLoading(false);
@@ -103,45 +95,70 @@ export const PrayerWallScreen: React.FC = () => {
 
   const handlePray = async (prayer: PrayerWithDetails) => {
     if (!session?.user?.id) return;
+    
+    // Prevent double-clicks
+    if (processingPrayers.has(prayer.id)) return;
+    
+    setProcessingPrayers(prev => new Set(prev).add(prayer.id));
 
-    const wasAlreadyPrayed = prayer.user_prayed;
+    const currentCount = prayer.total_prayed;
 
-    // Optimistic update
+    // Optimistic update - increment count by 1
     setPrayers(prev => prev.map(p => 
       p.id === prayer.id 
-        ? { ...p, total_prayed: p.total_prayed + 1, user_prayed: true }
+        ? { ...p, total_prayed: p.total_prayed + 1 }
         : p
     ));
 
-    // Upsert prayer interaction
-    const { error } = await supabase
-      .from('prayer_interactions')
-      .upsert(
-        {
-          prayer_id: prayer.id,
-          user_id: session.user.id,
-          prayed_count: prayer.total_prayed + 1,
-          last_prayed_at: new Date().toISOString(),
-        },
-        { onConflict: 'prayer_id,user_id' }
-      );
+    // SIMPLE: Increment prayer_count atomically using database function
+    const { data, error } = await supabase.rpc('increment_prayer_count', {
+      prayer_id_param: prayer.id
+    });
 
     if (error) {
+      console.error('Error incrementing prayer count:', error);
+      console.error('Error details:', JSON.stringify(error, null, 2));
       // Revert on error
       setPrayers(prev => prev.map(p => 
         p.id === prayer.id 
-          ? { ...p, total_prayed: p.total_prayed - 1 }
+          ? { ...p, total_prayed: currentCount }
           : p
       ));
-    } else if (!wasAlreadyPrayed && prayer.user_id !== session.user.id) {
-      // Notify the prayer author that someone prayed for their request
-      // Only if this is the first time this user is praying for it
-      await sendPrayerNotification(
-        '🙏 Someone Prayed for You',
-        `${profile?.full_name || 'Someone'} prayed for "${prayer.title}"`,
-        prayer.id
-      );
+    } else {
+      // Success! Refresh to get the accurate count from database
+      // This ensures the count is correct even if there were any issues
+      await fetchPrayers();
+
+      // Send push notification to prayer author if different from current user
+      if (prayer.user_id !== session.user.id && profile) {
+        // Check if prayer author has prayer notifications enabled
+        const { data: authorPreferences } = await supabase
+          .from('user_preferences')
+          .select('prayer_notifications')
+          .eq('user_id', prayer.user_id)
+          .single();
+
+        if (authorPreferences?.prayer_notifications !== false) {
+          // Send push notification
+          await sendPushNotification(
+            prayer.user_id,
+            '🙏 Someone Prayed for You',
+            `${profile.full_name} prayed for "${prayer.title}"`,
+            {
+              type: 'prayer',
+              id: prayer.id,
+            }
+          );
+        }
+      }
     }
+    
+    // Remove from processing set
+    setProcessingPrayers(prev => {
+      const next = new Set(prev);
+      next.delete(prayer.id);
+      return next;
+    });
   };
 
   const handleMarkAnswered = async (prayer: PrayerWithDetails) => {
@@ -276,12 +293,6 @@ export const PrayerWallScreen: React.FC = () => {
           style: 'destructive',
           onPress: async () => {
             try {
-              // Delete prayer interactions first
-              await supabase
-                .from('prayer_interactions')
-                .delete()
-                .eq('prayer_id', selectedPrayer.id);
-
               // Delete the prayer
               const { error } = await supabase
                 .from('prayers')
@@ -374,9 +385,11 @@ export const PrayerWallScreen: React.FC = () => {
               <TouchableOpacity 
                 style={[
                   styles.prayButton, 
-                  { backgroundColor: colors.primary }
+                  { backgroundColor: colors.primary },
+                  processingPrayers.has(prayer.id) && { opacity: 0.6 }
                 ]}
                 onPress={() => handlePray(prayer)}
+                disabled={processingPrayers.has(prayer.id)}
               >
                 <MaterialCommunityIcons name="hands-pray" size={16} color="#FFFFFF" style={{ marginRight: 4 }} />
                 <Text style={styles.prayButtonText}>Prayed</Text>

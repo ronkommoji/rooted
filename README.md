@@ -202,8 +202,7 @@ Key tables:
 - `profiles` — User profiles
 - `groups` — Small groups with invite codes
 - `group_members` — Group membership
-- `prayers` — Prayer requests
-- `prayer_interactions` — Prayer counts
+- `prayers` — Prayer requests (includes prayer_count field)
 - `devotionals` — Daily devotional posts
 - `events` — Group events
 - `user_streaks` — Devotional streak tracking

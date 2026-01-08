@@ -1,133 +1,130 @@
-# 🚀 Deployment Guide - Rooted App
+# 🚀 Rooted App - Deployment Guide
 
-## Prerequisites
+## TestFlight Deployment
 
-1. **EAS CLI installed globally:**
-   ```bash
-   npm install -g eas-cli
-   ```
-
-2. **Logged into EAS:**
-   ```bash
-   eas login
-   ```
-
-3. **Apple Developer Account** - Make sure you have:
-   - Active Apple Developer Program membership
-   - App Store Connect access
-   - Certificates and provisioning profiles set up (EAS handles this automatically)
-
----
-
-## 📱 Building for TestFlight
-
-### Step 1: Update Version (if needed)
-The version is currently set to `1.0.1` in `app.json`. EAS will auto-increment the build number.
-
-### Step 2: Build iOS Production Build
+### Step 1: Build for iOS
 
 ```bash
 eas build --platform ios --profile production
 ```
 
-This will:
-- Create a production build
-- Auto-increment the build number
-- Generate certificates and provisioning profiles automatically
-- Upload to EAS servers
+- Build takes **15-30 minutes**
+- Monitor progress at the URL provided by EAS
+- Or check status: `eas build:list`
 
-**Note:** The build takes about 10-20 minutes. You'll get a URL to track progress.
+### Step 2: Submit to TestFlight
 
-### Step 3: Submit to TestFlight
-
-Once the build completes, submit it to TestFlight:
+After build completes, submit to TestFlight:
 
 ```bash
-eas submit --platform ios --profile production
+eas submit --platform ios --latest
 ```
 
-This will:
-- Upload the build to App Store Connect
-- Process it for TestFlight (takes ~10-30 minutes)
-- Make it available for internal/external testing
+This automatically:
+- Finds your latest production build
+- Uploads it to App Store Connect
+- Submits it to TestFlight
 
----
+### Step 3: Complete TestFlight Setup
 
-## 🔄 Quick Deploy (Build + Submit in one command)
+1. Go to [App Store Connect](https://appstoreconnect.apple.com)
+2. Navigate to **My Apps** → **Rooted** → **TestFlight** tab
+3. Wait **5-10 minutes** for build processing
+4. Fill out **Test Information**:
+   - Beta App Description
+   - Feedback Email
+   - Privacy Policy URL (can be a simple link for testing)
+5. Add **Internal Testers**:
+   - Create a group (e.g., "Beta Testers")
+   - Add testers by their Apple ID emails
+   - They'll receive an email invitation to install via TestFlight app
 
-You can also build and submit in one go:
-
-```bash
-eas build --platform ios --profile production --auto-submit
-```
-
----
-
-## 📋 Alternative: Preview Build (for testing)
-
-If you want to test the build before submitting to TestFlight:
-
-```bash
-# Build preview version
-eas build --platform ios --profile preview
-
-# Install on device via TestFlight or direct install
-```
-
----
-
-## 🎯 What Happens Next
-
-1. **Build completes** → You'll get a notification
-2. **Submit completes** → Build appears in App Store Connect
-3. **Processing** → Apple processes the build (10-30 min)
-4. **TestFlight** → Build becomes available for testing
-5. **Testers** → Add testers in App Store Connect → TestFlight tab
-
----
-
-## 🔍 Check Build Status
+## Quick Reference Commands
 
 ```bash
-# List all builds
+# Build for iOS
+eas build --platform ios --profile production
+
+# Submit to TestFlight (after build completes)
+eas submit --platform ios --latest
+
+# Check build status
 eas build:list
 
-# View specific build details
-eas build:view [BUILD_ID]
+# View project info
+eas project:info
 ```
 
----
+## Configuration
 
-## 📝 Important Notes
+Your `eas.json` is already configured with:
+- Apple ID: `ronkommoji@gmail.com`
+- Team ID: `34V258BYBK`
+- Project ID: `a89bfa54-b55b-4597-b84a-45e0123cd4ef`
 
-- **Version Number**: Update `version` in `app.json` for each release
-- **Build Number**: Auto-incremented by EAS (configured in `eas.json`)
-- **Certificates**: EAS manages these automatically
-- **TestFlight**: First build may take longer to process
+## When to Rebuild vs OTA Update
 
----
+### Rebuild Required For:
+- Adding new native dependencies
+- Changing `app.json` configuration
+- Modifying native code
+- Major version releases
 
-## 🐛 Troubleshooting
+### OTA Update (No Rebuild) For:
+- JavaScript/TypeScript code changes
+- UI updates
+- Bug fixes
+- Feature additions (if no native changes)
 
-### Build fails?
-- Check EAS dashboard: https://expo.dev/accounts/[your-account]/projects/rooted/builds
-- Review build logs for errors
-
-### Submit fails?
-- Verify Apple ID and Team ID in `eas.json`
-- Check App Store Connect for any issues
-- Ensure you have the right permissions
-
-### Need to revoke certificates?
+### OTA Update Command:
 ```bash
-eas credentials
+eas update --branch production --message "Description of changes"
 ```
 
----
+## Making Updates After Initial Release
 
-## 📚 Resources
+### For Minor Updates (JS/UI changes):
+Use EAS Update (OTA) - fastest way:
+```bash
+eas update --branch production --message "Fixed bug in prayer wall"
+```
+Users get the update automatically next time they open the app!
 
-- [EAS Build Docs](https://docs.expo.dev/build/introduction/)
-- [EAS Submit Docs](https://docs.expo.dev/submit/introduction/)
-- [App Store Connect](https://appstoreconnect.apple.com/)
+### For Major Updates (native code changes, new SDK):
+You need a new build:
+```bash
+# 1. Increment version in app.json first
+# 2. Build
+eas build --platform ios --profile production
+# 3. Submit
+eas submit --platform ios --latest
+```
 
+## Version Management
+
+- **Version** (`app.json`): Visible to users (e.g., "1.0.1")
+- **Build Number**: Auto-increments with `"autoIncrement": true` in `eas.json`
+
+## Troubleshooting
+
+### Build Fails
+- Check EAS build logs at the provided URL
+- Verify Apple Developer account is active
+- Ensure certificates are valid
+
+### Submit Fails
+- Verify Apple ID and Team ID in `eas.json`
+- Check that build completed successfully
+- Ensure app exists in App Store Connect
+
+### TestFlight Not Showing Build
+- Wait 5-10 minutes for processing
+- Check App Store Connect → TestFlight → Builds
+- Verify build status is "Ready to Submit"
+
+## Notes
+
+- Push notifications require physical devices (not simulators)
+- TestFlight builds expire after 90 days
+- Internal testers can test immediately after build is processed
+- External testing requires App Review (for production release)

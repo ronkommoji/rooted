@@ -22,6 +22,7 @@ import { Event } from '../../types/database';
 import { format, parseISO } from 'date-fns';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { useNotifications } from '../../hooks/useNotifications';
+import { sendPushNotification } from '../../lib/notifications';
 
 type EventWithRsvps = Event & {
   rsvp_counts: { yes: number; no: number };
@@ -195,7 +196,7 @@ export const EventsScreen: React.FC = () => {
 
       if (error) throw error;
 
-      // Schedule event notifications
+      // Schedule event notifications (local reminders)
       if (newEvent && newEvent.event_date) {
         await scheduleEventNotifications(
           newEvent.id,
@@ -203,6 +204,45 @@ export const EventsScreen: React.FC = () => {
           parseISO(newEvent.event_date),
           newEvent.location || undefined
         );
+      }
+
+      // Send push notifications to all group members with event_alerts enabled
+      const { data: groupMembers } = await supabase
+        .from('group_members')
+        .select('user_id')
+        .eq('group_id', currentGroup.id);
+
+      if (groupMembers) {
+        // Get preferences for all members
+        const userIds = groupMembers.map(m => m.user_id);
+        const { data: preferences } = await supabase
+          .from('user_preferences')
+          .select('user_id, event_alerts')
+          .in('user_id', userIds);
+
+        // Send push notification to each member with event_alerts enabled
+        const notifications = groupMembers
+          .filter(member => {
+            // Don't notify the event creator
+            if (member.user_id === session.user.id) return false;
+            
+            // Check if user has event_alerts enabled (default to true if not set)
+            const userPrefs = preferences?.find(p => p.user_id === member.user_id);
+            return userPrefs?.event_alerts !== false;
+          })
+          .map(member =>
+            sendPushNotification(
+              member.user_id,
+              '📅 New Event Created',
+              `${newEvent.title}${newEvent.event_date ? ` on ${format(parseISO(newEvent.event_date), 'MMM d, yyyy')}` : ''}`,
+              {
+                type: 'event',
+                id: newEvent.id,
+              }
+            )
+          );
+
+        await Promise.all(notifications);
       }
 
       resetCreateModal();

@@ -13,7 +13,7 @@ import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useTheme } from '../../theme/ThemeContext';
 import { Input, Button, Card } from '../../components';
 import { useAppStore } from '../../store/useAppStore';
-import { requestNotificationPermissions } from '../../lib/notifications';
+import { requestNotificationPermissions, registerForPushNotifications } from '../../lib/notifications';
 
 type OnboardingStep = 'choice' | 'create' | 'join' | 'notifications';
 
@@ -70,6 +70,11 @@ export const OnboardingScreen: React.FC = () => {
     try {
       const hasPermission = await requestNotificationPermissions();
       if (hasPermission) {
+        // Register push token after permission granted
+        const { session } = useAppStore.getState();
+        if (session?.user?.id) {
+          await registerForPushNotifications(session.user.id);
+        }
         // User granted permission, onboarding is complete
         // The app will automatically navigate to MainNavigator since currentGroup is now set
       } else {

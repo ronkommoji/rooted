@@ -8,6 +8,7 @@ import {
   sendPrayerNotification,
   scheduleEventNotifications,
   cancelEventNotifications as cancelEventNotificationsLib,
+  registerForPushNotifications,
   NotificationData,
 } from '../lib/notifications';
 
@@ -23,26 +24,28 @@ export function useNotifications() {
   useEffect(() => {
     initializeNotifications();
 
-    // Set up notification listeners
+    // Set up notification listener (only for foreground notifications)
     notificationListener.current = Notifications.addNotificationReceivedListener((notification) => {
       // Handle notification received while app is in foreground
       console.log('Notification received:', notification);
     });
 
-    responseListener.current = Notifications.addNotificationResponseReceivedListener((response) => {
-      // Handle notification tap
-      handleNotificationTap(response.notification.request.content.data as NotificationData);
-    });
+    // Note: Notification response listener is handled in NotificationContext
+    // to avoid duplicate navigation attempts
 
     return () => {
       if (notificationListener.current) {
         Notifications.removeNotificationSubscription(notificationListener.current);
       }
-      if (responseListener.current) {
-        Notifications.removeNotificationSubscription(responseListener.current);
-      }
     };
   }, []);
+
+  // Register push token when session is available
+  useEffect(() => {
+    if (session?.user?.id) {
+      initializeNotifications();
+    }
+  }, [session?.user?.id]);
 
   // Update notifications when preferences change
   useEffect(() => {
@@ -59,10 +62,28 @@ export function useNotifications() {
   ]);
 
   const initializeNotifications = async () => {
+    if (!session?.user?.id) return;
+    
     const hasPermission = await requestNotificationPermissions();
     if (!hasPermission) {
       console.warn('Notification permissions not granted');
+      return;
     }
+
+    // Register for push notifications
+    await registerForPushNotifications(session.user.id);
+
+    // Listen for push token updates
+    const tokenListener = Notifications.addPushTokenListener(async (tokenData) => {
+      console.log('Push token updated:', tokenData);
+      if (session?.user?.id) {
+        await registerForPushNotifications(session.user.id);
+      }
+    });
+
+    return () => {
+      tokenListener.remove();
+    };
   };
 
   const updateNotificationSettings = async () => {
