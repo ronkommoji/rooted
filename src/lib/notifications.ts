@@ -101,6 +101,7 @@ export async function scheduleDevotionalReminder(
         } as NotificationData,
       },
       trigger: {
+        type: 'daily',
         hour,
         minute,
         repeats: true,
@@ -194,7 +195,10 @@ export async function scheduleEventNotifications(
               id: eventId,
             } as NotificationData,
           },
-          trigger: reminderDate,
+          trigger: {
+            type: 'date',
+            date: reminderDate,
+          },
         });
       }
     }
@@ -216,7 +220,10 @@ export async function scheduleEventNotifications(
               id: eventId,
             } as NotificationData,
           },
-          trigger: reminderDate,
+          trigger: {
+            type: 'date',
+            date: reminderDate,
+          },
         });
       }
     }
@@ -394,4 +401,4 @@ export async function sendPushNotification(
   } catch (error) {
     console.error('Error calling push notification function:', error);
   }
-
+}

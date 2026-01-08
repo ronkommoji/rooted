@@ -22,7 +22,7 @@ interface SubmissionCardProps {
   isLiked?: boolean;
 }
 
-export const SubmissionCard: React.FC<SubmissionCardProps> = ({
+export const SubmissionCard: React.FC<SubmissionCardProps> = React.memo(({
   submission,
   isOwnPost,
   onImagePress,
@@ -118,7 +118,7 @@ export const SubmissionCard: React.FC<SubmissionCardProps> = ({
       <TouchableOpacity onPress={onImagePress} activeOpacity={0.95}>
         {isDeleting ? (
           <View style={[styles.image, styles.deletingOverlay]}>
-            <ActivityIndicator size="large" color={colors.primary} />
+            <ActivityIndicator size="large" color={isDark ? '#3D5A50' : colors.primary} />
             <Text style={[styles.deletingText, { color: colors.textMuted }]}>
               Deleting...
             </Text>
@@ -189,7 +189,7 @@ export const SubmissionCard: React.FC<SubmissionCardProps> = ({
       </Modal>
     </View>
   );
-};
+});
 
 const styles = StyleSheet.create({
   container: {

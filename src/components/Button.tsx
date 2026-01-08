@@ -32,7 +32,10 @@ export const Button: React.FC<ButtonProps> = ({
   textStyle,
   fullWidth = false,
 }) => {
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
+  
+  // Use dark green in dark mode instead of light green/teal
+  const primaryColor = isDark ? '#3D5A50' : colors.primary;
 
   const getButtonStyles = (): ViewStyle => {
     const base: ViewStyle = {
@@ -65,13 +68,13 @@ export const Button: React.FC<ButtonProps> = ({
       case 'outline':
         base.backgroundColor = 'transparent';
         base.borderWidth = 2;
-        base.borderColor = colors.primary;
+        base.borderColor = primaryColor;
         break;
       case 'ghost':
         base.backgroundColor = 'transparent';
         break;
       default:
-        base.backgroundColor = colors.primary;
+        base.backgroundColor = primaryColor;
     }
 
     if (disabled) {
@@ -109,7 +112,7 @@ export const Button: React.FC<ButtonProps> = ({
         break;
       case 'outline':
       case 'ghost':
-        base.color = colors.primary;
+        base.color = primaryColor;
         break;
       default:
         base.color = '#FFFFFF';
@@ -127,7 +130,7 @@ export const Button: React.FC<ButtonProps> = ({
     >
       {loading ? (
         <ActivityIndicator 
-          color={variant === 'primary' ? '#FFFFFF' : colors.primary} 
+          color={variant === 'primary' ? '#FFFFFF' : primaryColor} 
           style={{ marginRight: 8 }}
         />
       ) : null}

@@ -136,7 +136,7 @@ export const AddDevotionalSheet: React.FC<AddDevotionalSheetProps> = ({
 
           {isLoading ? (
             <View style={styles.loadingContainer}>
-              <ActivityIndicator size="large" color={colors.primary} />
+              <ActivityIndicator size="large" color={isDark ? '#3D5A50' : colors.primary} />
               <Text style={[styles.loadingText, { color: colors.textSecondary }]}>
                 {uploading ? 'Uploading your devotional...' : 'Processing...'}
               </Text>
@@ -154,10 +154,10 @@ export const AddDevotionalSheet: React.FC<AddDevotionalSheetProps> = ({
                 <View
                   style={[
                     styles.iconContainer,
-                    { backgroundColor: colors.primary + '20' },
+                    { backgroundColor: (isDark ? '#3D5A50' : colors.primary) + '20' },
                   ]}
                 >
-                  <Ionicons name="camera" size={32} color={colors.primary} />
+                  <Ionicons name="camera" size={32} color={isDark ? '#3D5A50' : colors.primary} />
                 </View>
                 <Text style={[styles.optionTitle, { color: colors.text }]}>
                   Take Photo
@@ -178,10 +178,10 @@ export const AddDevotionalSheet: React.FC<AddDevotionalSheetProps> = ({
                 <View
                   style={[
                     styles.iconContainer,
-                    { backgroundColor: colors.accent + '40' },
+                    { backgroundColor: (isDark ? '#3D5A50' : colors.primary) + '20' },
                   ]}
                 >
-                  <Ionicons name="images" size={32} color={colors.primary} />
+                  <Ionicons name="images" size={32} color={isDark ? '#3D5A50' : colors.primary} />
                 </View>
                 <Text style={[styles.optionTitle, { color: colors.text }]}>
                   Upload from Library

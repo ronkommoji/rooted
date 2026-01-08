@@ -15,7 +15,7 @@ export const Avatar: React.FC<AvatarProps> = ({
   size = 40, 
   onPress 
 }) => {
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
   
   // Get initials from name (first + last initial if available)
   const getInitials = (fullName: string): string => {
@@ -29,11 +29,14 @@ export const Avatar: React.FC<AvatarProps> = ({
 
   const initials = getInitials(name);
   
+  // Use neutral color for avatars in dark mode, primary (green) only in light mode
+  const avatarBg = isDark ? (colors.avatarBg || '#3A3A3A') : colors.primary;
+  
   const containerStyle = {
     width: size,
     height: size,
     borderRadius: size / 2,
-    backgroundColor: colors.primary,
+    backgroundColor: avatarBg,
   };
 
   const content = imageUrl ? (

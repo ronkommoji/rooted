@@ -15,14 +15,17 @@ export const Card: React.FC<CardProps> = ({
   onPress,
   variant = 'default' 
 }) => {
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
+  
+  // Use dark green in dark mode
+  const primaryColor = isDark ? '#3D5A50' : colors.primary;
 
   const getBackgroundColor = () => {
     switch (variant) {
       case 'accent':
         return colors.accent;
       case 'primary':
-        return colors.primary;
+        return primaryColor;
       default:
         return colors.card;
     }

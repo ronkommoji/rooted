@@ -28,7 +28,7 @@ type PrayerWithDetails = Prayer & {
 };
 
 export const PrayerWallScreen: React.FC = () => {
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
   const { currentGroup, profile, session } = useAppStore();
   const { sendPrayerNotification } = useNotifications();
   
@@ -385,7 +385,7 @@ export const PrayerWallScreen: React.FC = () => {
               <TouchableOpacity 
                 style={[
                   styles.prayButton, 
-                  { backgroundColor: colors.primary },
+                  { backgroundColor: isDark ? '#3D5A50' : colors.primary },
                   processingPrayers.has(prayer.id) && { opacity: 0.6 }
                 ]}
                 onPress={() => handlePray(prayer)}
@@ -440,7 +440,7 @@ export const PrayerWallScreen: React.FC = () => {
 
       {filter === 'Requests' && (
         <TouchableOpacity
-          style={[styles.fab, { backgroundColor: colors.primary }]}
+          style={[styles.fab, { backgroundColor: isDark ? '#3D5A50' : colors.primary }]}
           onPress={() => setShowCreateModal(true)}
         >
           <Ionicons name="add" size={28} color="#FFFFFF" />

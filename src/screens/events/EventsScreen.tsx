@@ -30,7 +30,7 @@ type EventWithRsvps = Event & {
 };
 
 export const EventsScreen: React.FC = () => {
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
   const { currentGroup, session } = useAppStore();
   const { scheduleEventNotifications, cancelEventNotifications } = useNotifications();
   
@@ -460,20 +460,20 @@ export const EventsScreen: React.FC = () => {
             <TouchableOpacity
               style={[
                 styles.rsvpButton,
-                { borderColor: colors.primary },
-                isUserGoing && { backgroundColor: colors.primary },
+                { borderColor: isDark ? '#3D5A50' : colors.primary },
+                isUserGoing && { backgroundColor: isDark ? '#3D5A50' : colors.primary },
               ]}
               onPress={() => handleRsvp(event, 'yes')}
             >
               <Ionicons 
                 name={isUserGoing ? "checkmark-circle" : "checkmark-circle-outline"} 
                 size={18} 
-                color={isUserGoing ? '#FFFFFF' : colors.primary} 
+                color={isUserGoing ? '#FFFFFF' : (isDark ? '#3D5A50' : colors.primary)} 
               />
               <Text
                 style={[
                   styles.rsvpButtonText,
-                  { color: isUserGoing ? '#FFFFFF' : colors.primary },
+                  { color: isUserGoing ? '#FFFFFF' : (isDark ? '#3D5A50' : colors.primary) },
                 ]}
               >
                 Yes
@@ -547,7 +547,7 @@ export const EventsScreen: React.FC = () => {
 
       {filter === 'Upcoming' && (
         <TouchableOpacity
-          style={[styles.fab, { backgroundColor: colors.primary }]}
+          style={[styles.fab, { backgroundColor: isDark ? '#3D5A50' : colors.primary }]}
           onPress={() => setShowCreateModal(true)}
         >
           <Ionicons name="add" size={28} color="#FFFFFF" />
@@ -589,7 +589,7 @@ export const EventsScreen: React.FC = () => {
                     style={[styles.dateTimeButton, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}
                     onPress={() => setShowDatePicker(true)}
                   >
-                    <Ionicons name="calendar-outline" size={18} color={colors.primary} />
+                    <Ionicons name="calendar-outline" size={18} color={isDark ? '#3D5A50' : colors.primary} />
                     <Text style={[styles.dateTimeText, { color: colors.text }]}>
                       {format(eventDate, 'MMM d, yyyy')}
                     </Text>
@@ -599,7 +599,7 @@ export const EventsScreen: React.FC = () => {
                     style={[styles.dateTimeButton, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}
                     onPress={() => setShowTimePicker(true)}
                   >
-                    <Ionicons name="time-outline" size={18} color={colors.primary} />
+                    <Ionicons name="time-outline" size={18} color={isDark ? '#3D5A50' : colors.primary} />
                     <Text style={[styles.dateTimeText, { color: colors.text }]}>
                       {format(eventDate, 'h:mm a')}
                     </Text>
@@ -626,7 +626,7 @@ export const EventsScreen: React.FC = () => {
 
               {Platform.OS === 'ios' && (showDatePicker || showTimePicker) && (
                 <TouchableOpacity 
-                  style={[styles.doneButton, { backgroundColor: colors.primary }]}
+                  style={[styles.doneButton, { backgroundColor: isDark ? '#3D5A50' : colors.primary }]}
                   onPress={() => {
                     setShowDatePicker(false);
                     setShowTimePicker(false);
@@ -706,7 +706,7 @@ export const EventsScreen: React.FC = () => {
                     style={[styles.dateTimeButton, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}
                     onPress={() => setShowEditDatePicker(true)}
                   >
-                    <Ionicons name="calendar-outline" size={18} color={colors.primary} />
+                    <Ionicons name="calendar-outline" size={18} color={isDark ? '#3D5A50' : colors.primary} />
                     <Text style={[styles.dateTimeText, { color: colors.text }]}>
                       {format(editEventDate, 'MMM d, yyyy')}
                     </Text>
@@ -716,7 +716,7 @@ export const EventsScreen: React.FC = () => {
                     style={[styles.dateTimeButton, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}
                     onPress={() => setShowEditTimePicker(true)}
                   >
-                    <Ionicons name="time-outline" size={18} color={colors.primary} />
+                    <Ionicons name="time-outline" size={18} color={isDark ? '#3D5A50' : colors.primary} />
                     <Text style={[styles.dateTimeText, { color: colors.text }]}>
                       {format(editEventDate, 'h:mm a')}
                     </Text>
@@ -743,7 +743,7 @@ export const EventsScreen: React.FC = () => {
 
               {Platform.OS === 'ios' && (showEditDatePicker || showEditTimePicker) && (
                 <TouchableOpacity 
-                  style={[styles.doneButton, { backgroundColor: colors.primary }]}
+                  style={[styles.doneButton, { backgroundColor: isDark ? '#3D5A50' : colors.primary }]}
                   onPress={() => {
                     setShowEditDatePicker(false);
                     setShowEditTimePicker(false);

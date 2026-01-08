@@ -53,9 +53,9 @@ export const WeekDayPicker: React.FC<WeekDayPickerProps> = ({
                 key={day.toISOString()}
                 style={[
                   styles.dayButton,
-                  isSelected && { backgroundColor: colors.primary },
+                  isSelected && { backgroundColor: isDark ? '#3D5A50' : colors.primary },
                   !isSelected && isToday && { 
-                    borderColor: colors.primary, 
+                    borderColor: isDark ? '#3D5A50' : colors.primary, 
                     borderWidth: 2 
                   },
                 ]}

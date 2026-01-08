@@ -13,7 +13,10 @@ export const PillToggle: React.FC<PillToggleProps> = ({
   selected, 
   onSelect 
 }) => {
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
+  
+  // Use dark green in dark mode
+  const primaryColor = isDark ? '#3D5A50' : colors.primary;
 
   return (
     <View style={[styles.container, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
@@ -24,7 +27,7 @@ export const PillToggle: React.FC<PillToggleProps> = ({
             key={option}
             style={[
               styles.pill,
-              isSelected && { backgroundColor: colors.primary },
+              isSelected && { backgroundColor: primaryColor },
             ]}
             onPress={() => onSelect(option)}
             activeOpacity={0.7}

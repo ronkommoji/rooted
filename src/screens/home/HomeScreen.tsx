@@ -13,7 +13,7 @@ import { useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { format, parseISO } from 'date-fns';
 import { useTheme } from '../../theme/ThemeContext';
-import { Card, Avatar, Header } from '../../components';
+import { Card, Avatar, Header, ChallengeCard, ChallengeDetailModal } from '../../components';
 import { useAppStore } from '../../store/useAppStore';
 import { supabase } from '../../lib/supabase';
 import { Prayer, Event, Profile } from '../../types/database';
@@ -39,6 +39,9 @@ export const HomeScreen: React.FC = () => {
   const [storyViewerStartMember, setStoryViewerStartMember] = useState('');
   const [showAddDevotional, setShowAddDevotional] = useState(false);
   const [uploading, setUploading] = useState(false);
+  
+  // Challenge modal state
+  const [showChallengeModal, setShowChallengeModal] = useState(false);
 
   // Use today's devotionals
   const today = new Date();
@@ -146,13 +149,6 @@ export const HomeScreen: React.FC = () => {
     }
   };
 
-  // Soft, neutral colors for the challenge card
-  const challengeCardBg = isDark ? '#2C3A37' : '#F8F7F4';
-  const challengeBorderColor = isDark ? colors.primary + '60' : colors.primary + '30';
-  const scriptureColor = isDark ? '#FDFBF7' : '#3D5A50';
-  const referenceColor = isDark ? '#B9D6D2' : '#6B8E7D';
-  const challengeTextColor = isDark ? '#B0B0B0' : '#6B6B6B';
-
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
       <Header showGroup />
@@ -165,49 +161,12 @@ export const HomeScreen: React.FC = () => {
         }
         showsVerticalScrollIndicator={false}
       >
-        {/* Weekly Invitation - Gentle, faith-forward design */}
+        {/* Challenge of the Week */}
         <View style={styles.section}>
-          <View 
-            style={[
-              styles.invitationCard, 
-              { 
-                backgroundColor: challengeCardBg,
-                borderColor: challengeBorderColor,
-              }
-            ]}
-          >
-            {/* Subtle decorative element */}
-            <View style={[styles.decorativeLine, { backgroundColor: colors.primary + '30' }]} />
-            
-            {/* Scripture */}
-            <Text style={[styles.scriptureText, { color: scriptureColor }]}>
-              "{weeklyChallenge.scripture}"
-            </Text>
-            
-            {/* Reference */}
-            <Text style={[styles.referenceText, { color: referenceColor }]}>
-              — {weeklyChallenge.reference}
-            </Text>
-            
-            {/* Divider */}
-            <View style={[styles.divider, { backgroundColor: challengeBorderColor }]} />
-            
-            {/* This week's gentle invitation */}
-            <View style={styles.challengeRow}>
-              <Ionicons 
-                name="leaf-outline" 
-                size={16} 
-                color={colors.primary} 
-                style={styles.leafIcon}
-              />
-              <Text style={[styles.thisWeekLabel, { color: challengeTextColor }]}>
-                This week:
-              </Text>
-              <Text style={[styles.challengeAction, { color: colors.text }]}>
-                {weeklyChallenge.challenge}
-              </Text>
-            </View>
-          </View>
+          <ChallengeCard
+            challenge={weeklyChallenge}
+            onPress={() => setShowChallengeModal(true)}
+          />
         </View>
 
         {/* Today's Devotionals - Story Row */}
@@ -215,7 +174,7 @@ export const HomeScreen: React.FC = () => {
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
               <Text style={[styles.sectionTitle, { color: colors.text }]}>
-                Today's Devotionals
+                DEVOTIONALS
               </Text>
               <TouchableOpacity onPress={() => navigation.navigate('Devotionals')}>
                 <Text style={[styles.seeAll, { color: colors.primary }]}>
@@ -238,7 +197,7 @@ export const HomeScreen: React.FC = () => {
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Text style={[styles.sectionTitle, { color: colors.text }]}>
-              Recent Prayer Requests
+              PRAYER REQUESTS
             </Text>
             <TouchableOpacity onPress={() => navigation.navigate('Prayers')}>
               <Text style={[styles.seeAll, { color: colors.primary }]}>
@@ -283,7 +242,7 @@ export const HomeScreen: React.FC = () => {
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Text style={[styles.sectionTitle, { color: colors.text }]}>
-              Upcoming Events
+              UPCOMING EVENTS
             </Text>
             <TouchableOpacity onPress={() => navigation.navigate('Events')}>
               <Text style={[styles.seeAll, { color: colors.primary }]}>
@@ -306,11 +265,11 @@ export const HomeScreen: React.FC = () => {
                 onPress={() => navigation.navigate('Events')}
               >
                 <View style={styles.eventRow}>
-                  <View style={[styles.eventDateBox, { backgroundColor: colors.primary + '15' }]}>
-                    <Text style={[styles.eventMonth, { color: colors.primary }]}>
+                  <View style={[styles.eventDateBox, { backgroundColor: isDark ? '#3A3A3A' : colors.primary + '15' }]}>
+                    <Text style={[styles.eventMonth, { color: isDark ? colors.text : colors.primary }]}>
                       {event.event_date ? format(parseISO(event.event_date), 'MMM').toUpperCase() : '---'}
                     </Text>
-                    <Text style={[styles.eventDay, { color: colors.primary }]}>
+                    <Text style={[styles.eventDay, { color: isDark ? colors.text : colors.primary }]}>
                       {event.event_date ? format(parseISO(event.event_date), 'd') : '--'}
                     </Text>
                   </View>
@@ -359,6 +318,13 @@ export const HomeScreen: React.FC = () => {
         onImageSelected={handleAddDevotional}
         uploading={uploading}
       />
+
+      {/* Challenge Detail Modal */}
+      <ChallengeDetailModal
+        visible={showChallengeModal}
+        challenge={weeklyChallenge}
+        onClose={() => setShowChallengeModal(false)}
+      />
     </SafeAreaView>
   );
 };
@@ -388,63 +354,13 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '700',
     marginBottom: 12,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
   seeAll: {
     fontSize: 14,
     fontWeight: '600',
     marginBottom: 12,
-  },
-  
-  // Invitation card styles
-  invitationCard: {
-    borderRadius: 16,
-    borderWidth: 1.5,
-    paddingVertical: 24,
-    paddingHorizontal: 20,
-  },
-  decorativeLine: {
-    position: 'absolute',
-    top: 0,
-    left: 24,
-    right: 24,
-    height: 3,
-    borderRadius: 2,
-  },
-  scriptureText: {
-    fontSize: 18,
-    fontWeight: '500',
-    fontStyle: 'italic',
-    lineHeight: 26,
-    textAlign: 'center',
-    marginBottom: 12,
-  },
-  referenceText: {
-    fontSize: 14,
-    fontWeight: '600',
-    textAlign: 'center',
-    marginBottom: 16,
-  },
-  divider: {
-    height: 1,
-    marginHorizontal: 20,
-    marginBottom: 16,
-  },
-  challengeRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexWrap: 'wrap',
-  },
-  leafIcon: {
-    marginRight: 6,
-  },
-  thisWeekLabel: {
-    fontSize: 14,
-    marginRight: 4,
-  },
-  challengeAction: {
-    fontSize: 14,
-    fontWeight: '600',
   },
 
   emptyCard: {

@@ -19,12 +19,15 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
   onAction,
   icon = 'seedling',
 }) => {
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
+  
+  // Use dark green in dark mode
+  const primaryColor = isDark ? '#3D5A50' : colors.primary;
 
   return (
     <View style={styles.container}>
       <View style={[styles.iconContainer, { backgroundColor: colors.accent + '30' }]}>
-        <Icon name={icon} size={32} color={colors.primary} />
+        <Icon name={icon} size={32} color={primaryColor} />
       </View>
       <Text style={[styles.title, { color: colors.text }]}>{title}</Text>
       <Text style={[styles.message, { color: colors.textSecondary }]}>

@@ -17,7 +17,7 @@ export const weeklyChallenge: WeeklyChallenge[] = [
   {
     scripture: "Be still, and know that I am God.",
     reference: "Psalm 46:10",
-    challenge: "Spend 5 quiet minutes with God daily"
+    challenge: "Spend 5 minutes with God daily"
   },
   {
     scripture: "Give thanks in all circumstances; for this is the will of God.",

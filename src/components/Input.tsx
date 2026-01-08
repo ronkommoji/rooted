@@ -28,12 +28,15 @@ export const Input: React.FC<InputProps> = ({
   onRightIconPress,
   ...props
 }) => {
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
   const [isFocused, setIsFocused] = useState(false);
+  
+  // Use dark green in dark mode
+  const primaryColor = isDark ? '#3D5A50' : colors.primary;
 
   const getBorderColor = () => {
     if (error) return colors.error;
-    if (isFocused) return colors.primary;
+    if (isFocused) return primaryColor;
     return colors.cardBorder;
   };
 

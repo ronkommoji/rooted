@@ -17,7 +17,10 @@ export const DailySummary: React.FC<DailySummaryProps> = ({
   totalMembers,
   currentUserStreak,
 }) => {
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
+  
+  // Use dark green in dark mode
+  const primaryColor = isDark ? '#3D5A50' : colors.primary;
   const [showStreakInfo, setShowStreakInfo] = useState(false);
 
   const progressPercent = totalMembers > 0 ? (completedCount / totalMembers) * 100 : 0;
@@ -51,7 +54,7 @@ export const DailySummary: React.FC<DailySummaryProps> = ({
             style={[
               styles.progressFill,
               {
-                backgroundColor: colors.primary,
+                backgroundColor: primaryColor,
                 width: `${progressPercent}%`,
               },
             ]}
@@ -91,7 +94,7 @@ export const DailySummary: React.FC<DailySummaryProps> = ({
             </Text>
 
             <TouchableOpacity 
-              style={[styles.modalButton, { backgroundColor: colors.primary }]}
+              style={[styles.modalButton, { backgroundColor: primaryColor }]}
               onPress={() => setShowStreakInfo(false)}
             >
               <Text style={styles.modalButtonText}>Got it</Text>

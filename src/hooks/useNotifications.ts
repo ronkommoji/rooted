@@ -18,10 +18,16 @@ import {
 export function useNotifications() {
   const { preferences, session } = useAppStore();
   const notificationListener = useRef<Notifications.EventSubscription>();
-  const responseListener = useRef<Notifications.EventSubscription>();
+  const tokenListener = useRef<Notifications.EventSubscription>();
+  const lastRegisteredToken = useRef<string | null>(null);
+  const isInitializing = useRef(false);
+  const userIdRef = useRef<string | null>(null);
 
-  // Initialize notifications on mount
+  // Initialize notifications on mount and when session changes
   useEffect(() => {
+    if (!session?.user?.id) return;
+
+    userIdRef.current = session.user.id;
     initializeNotifications();
 
     // Set up notification listener (only for foreground notifications)
@@ -30,21 +36,14 @@ export function useNotifications() {
       console.log('Notification received:', notification);
     });
 
-    // Note: Notification response listener is handled in NotificationContext
-    // to avoid duplicate navigation attempts
-
     return () => {
       if (notificationListener.current) {
-        Notifications.removeNotificationSubscription(notificationListener.current);
+        notificationListener.current.remove();
+      }
+      if (tokenListener.current) {
+        tokenListener.current.remove();
       }
     };
-  }, []);
-
-  // Register push token when session is available
-  useEffect(() => {
-    if (session?.user?.id) {
-      initializeNotifications();
-    }
   }, [session?.user?.id]);
 
   // Update notifications when preferences change
@@ -62,28 +61,42 @@ export function useNotifications() {
   ]);
 
   const initializeNotifications = async () => {
-    if (!session?.user?.id) return;
+    if (!session?.user?.id || isInitializing.current) return;
     
-    const hasPermission = await requestNotificationPermissions();
-    if (!hasPermission) {
-      console.warn('Notification permissions not granted');
-      return;
-    }
-
-    // Register for push notifications
-    await registerForPushNotifications(session.user.id);
-
-    // Listen for push token updates
-    const tokenListener = Notifications.addPushTokenListener(async (tokenData) => {
-      console.log('Push token updated:', tokenData);
-      if (session?.user?.id) {
-        await registerForPushNotifications(session.user.id);
+    isInitializing.current = true;
+    const userId = session.user.id; // Capture userId for use in callback
+    
+    try {
+      const hasPermission = await requestNotificationPermissions();
+      if (!hasPermission) {
+        console.warn('Notification permissions not granted');
+        return;
       }
-    });
 
-    return () => {
-      tokenListener.remove();
-    };
+      // Register for push notifications (initial registration)
+      const token = await registerForPushNotifications(userId);
+      if (token) {
+        lastRegisteredToken.current = token;
+      }
+
+      // Clean up existing listener if any
+      if (tokenListener.current) {
+        tokenListener.current.remove();
+      }
+
+      // Set up push token listener only once
+      tokenListener.current = Notifications.addPushTokenListener(async (tokenData) => {
+        const newToken = tokenData.data;
+        // Only re-register if token actually changed
+        if (newToken && newToken !== lastRegisteredToken.current && userIdRef.current) {
+          console.log('Push token changed, re-registering...');
+          lastRegisteredToken.current = newToken;
+          await registerForPushNotifications(userIdRef.current);
+        }
+      });
+    } finally {
+      isInitializing.current = false;
+    }
   };
 
   const updateNotificationSettings = async () => {

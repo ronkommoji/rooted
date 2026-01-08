@@ -228,7 +228,7 @@ export const SettingsScreen: React.FC = () => {
       <Switch
         value={value}
         onValueChange={onValueChange}
-        trackColor={{ false: colors.cardBorder, true: colors.primary }}
+        trackColor={{ false: colors.cardBorder, true: isDark ? '#3D5A50' : colors.primary }}
         thumbColor="#FFFFFF"
       />
     </View>
@@ -238,8 +238,8 @@ export const SettingsScreen: React.FC = () => {
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButtonContainer}>
-          <Ionicons name="chevron-back" size={22} color={colors.primary} />
-          <Text style={[styles.backButton, { color: colors.primary }]}>Back</Text>
+          <Ionicons name="chevron-back" size={22} color={isDark ? '#3D5A50' : colors.primary} />
+          <Text style={[styles.backButton, { color: isDark ? '#3D5A50' : colors.primary }]}>Back</Text>
         </TouchableOpacity>
         <Text style={[styles.headerTitle, { color: colors.text }]}>Settings</Text>
         <View style={{ width: 50 }} />
@@ -276,7 +276,7 @@ export const SettingsScreen: React.FC = () => {
                   {currentGroup?.name || 'Bible Buddies'}
                 </Text>
                 {isAdmin && (
-                  <Ionicons name="pencil" size={16} color={colors.primary} style={{ marginLeft: 8 }} />
+                  <Ionicons name="pencil" size={16} color={isDark ? '#3D5A50' : colors.primary} style={{ marginLeft: 8 }} />
                 )}
               </View>
             </TouchableOpacity>
@@ -287,7 +287,7 @@ export const SettingsScreen: React.FC = () => {
                 <View style={[styles.inviteCodeBadge, { backgroundColor: colors.accent }]}>
                   <Text style={styles.inviteCodeText}>{currentGroup?.invite_code || '------'}</Text>
                 </View>
-                <Text style={[styles.shareText, { color: colors.primary }]}>Share</Text>
+                <Text style={[styles.shareText, { color: isDark ? '#3D5A50' : colors.primary }]}>Share</Text>
               </View>
             </TouchableOpacity>
             <View style={[styles.divider, { backgroundColor: colors.cardBorder }]} />

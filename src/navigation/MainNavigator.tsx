@@ -69,8 +69,8 @@ const TabIcon = ({ name, focused, color }: { name: string; focused: boolean; col
 const MainTabs: React.FC = () => {
   const { colors, isDark } = useTheme();
 
-  // Use white for inactive tabs in dark mode, black in light mode for better visibility
-  const inactiveColor = isDark ? '#FFFFFF' : '#2B2B2B';
+  // Use white for inactive tabs in dark mode (matching image), black in light mode
+  const inactiveColor = isDark ? '#FDFBF7' : '#2B2B2B';
 
   return (
     <Tab.Navigator
@@ -79,11 +79,11 @@ const MainTabs: React.FC = () => {
         tabBarIcon: ({ focused, color }) => (
           <TabIcon name={route.name} focused={focused} color={color} />
         ),
-        tabBarActiveTintColor: colors.primary,
+        tabBarActiveTintColor: isDark ? '#3D5A50' : colors.primary,
         tabBarInactiveTintColor: inactiveColor,
         tabBarStyle: {
-          backgroundColor: colors.card,
-          borderTopColor: colors.cardBorder,
+          backgroundColor: isDark ? colors.background : colors.card,
+          borderTopColor: isDark ? '#2A2A2A' : colors.cardBorder,
           paddingTop: 8,
           paddingBottom: 8,
           height: 80,

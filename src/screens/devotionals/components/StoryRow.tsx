@@ -60,7 +60,7 @@ export const StoryRow: React.FC<StoryRowProps> = ({
         {sortedMembers.map((member) => {
           const isCurrentUser = member.memberId === currentUserId;
           const hasPosted = member.hasPosted;
-          const ringColor = hasPosted ? colors.primary : colors.cardBorder;
+          const ringColor = hasPosted ? (isDark ? '#3D5A50' : colors.primary) : colors.cardBorder;
           const canTap = hasPosted || (isCurrentUser && !hasPosted);
 
           return (
@@ -87,7 +87,7 @@ export const StoryRow: React.FC<StoryRowProps> = ({
                 <View
                   style={[
                     styles.avatar,
-                    { backgroundColor: isDark ? '#3D4D49' : '#E8E7E2' },
+                    { backgroundColor: isDark ? '#3A3A3A' : '#E8E7E2' },
                   ]}
                 >
                   <Text
@@ -102,7 +102,7 @@ export const StoryRow: React.FC<StoryRowProps> = ({
 
                 {/* Add badge for current user who hasn't posted */}
                 {isCurrentUser && !hasPosted && (
-                  <View style={[styles.addBadge, { backgroundColor: colors.primary }]}>
+                  <View style={[styles.addBadge, { backgroundColor: isDark ? '#3D5A50' : colors.primary }]}>
                     <Ionicons name="add" size={14} color="#FFFFFF" />
                   </View>
                 )}

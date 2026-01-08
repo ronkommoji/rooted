@@ -37,7 +37,7 @@ interface UseDevotionalsReturn {
 export const useDevotionals = (selectedDate: Date): UseDevotionalsReturn => {
   const { currentGroup, session, groupMembers, fetchGroupMembers, profile } = useAppStore();
   
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [devotionals, setDevotionals] = useState<DevotionalWithProfile[]>([]);
   const [userStreak, setUserStreak] = useState(0);
@@ -54,67 +54,84 @@ export const useDevotionals = (selectedDate: Date): UseDevotionalsReturn => {
     }
 
     try {
-      // Ensure we have group members
-      if (groupMembers.length === 0) {
-        await fetchGroupMembers();
-      }
+      // Fetch group members, devotionals, and streak in parallel
+      const [groupMembersResult, devotionalsResult, streakResult] = await Promise.all([
+        // Fetch group members if needed
+        groupMembers.length === 0 ? fetchGroupMembers() : Promise.resolve(),
+        
+        // Fetch devotionals for selected date
+        supabase
+          .from('devotionals')
+          .select('*, profiles(*)')
+          .eq('group_id', currentGroup.id)
+          .eq('post_date', selectedDateISO),
+        
+        // Fetch user streak
+        supabase
+          .from('user_streaks')
+          .select('current_streak')
+          .eq('user_id', currentUserId)
+          .eq('group_id', currentGroup.id)
+          .single(),
+      ]);
 
-      // Fetch devotionals for selected date
-      const { data: devotionalsData, error } = await supabase
-        .from('devotionals')
-        .select('*, profiles(*)')
-        .eq('group_id', currentGroup.id)
-        .eq('post_date', selectedDateISO);
+      const { data: devotionalsData, error } = devotionalsResult as { data: any; error: any };
 
       if (error) {
         console.error('Error fetching devotionals:', error);
+        setLoading(false);
         return;
       }
 
-      // Fetch likes for each devotional
-      const devotionalsWithLikes = await Promise.all(
-        (devotionalsData || []).map(async (devotional) => {
-          // Get likes count
-          const { count: likesCount } = await supabase
-            .from('devotional_likes')
-            .select('*', { count: 'exact', head: true })
-            .eq('devotional_id', devotional.id);
+      // Early return if no devotionals
+      if (!devotionalsData || devotionalsData.length === 0) {
+        setDevotionals([]);
+        setLikedDevotionalIds(new Set());
+        const streakData = streakResult as { data: any };
+        setUserStreak(streakData?.data?.current_streak || 0);
+        setLoading(false);
+        return;
+      }
 
-          // Check if current user liked
-          const { data: userLike } = await supabase
-            .from('devotional_likes')
-            .select('id')
-            .eq('devotional_id', devotional.id)
-            .eq('user_id', currentUserId)
-            .single();
+      // Get all devotional IDs
+      const devotionalIds = devotionalsData.map((d: any) => d.id);
 
-          return {
-            ...devotional,
-            likes_count: likesCount || 0,
-            user_liked: !!userLike,
-          } as DevotionalWithProfile;
-        })
-      );
+      // Fetch all likes in a single query
+      const { data: allLikes, error: likesError } = await supabase
+        .from('devotional_likes')
+        .select('devotional_id, user_id')
+        .in('devotional_id', devotionalIds);
+
+      if (likesError) {
+        console.error('Error fetching likes:', likesError);
+      }
+
+      // Build a map of likes count and user likes
+      const likesCountMap = new Map<string, number>();
+      const userLikesSet = new Set<string>();
+
+      (allLikes || []).forEach((like: any) => {
+        const count = likesCountMap.get(like.devotional_id) || 0;
+        likesCountMap.set(like.devotional_id, count + 1);
+        
+        if (like.user_id === currentUserId) {
+          userLikesSet.add(like.devotional_id);
+        }
+      });
+
+      // Combine devotionals with likes data
+      const devotionalsWithLikes = devotionalsData.map((devotional: any) => ({
+        ...devotional,
+        likes_count: likesCountMap.get(devotional.id) || 0,
+        user_liked: userLikesSet.has(devotional.id),
+      })) as DevotionalWithProfile[];
 
       setDevotionals(devotionalsWithLikes);
+      setLikedDevotionalIds(userLikesSet);
 
-      // Update liked devotional IDs
-      const likedIds = new Set(
-        devotionalsWithLikes
-          .filter((d) => d.user_liked)
-          .map((d) => d.id)
-      );
-      setLikedDevotionalIds(likedIds);
-
-      // Fetch user streak
-      const { data: streakData } = await supabase
-        .from('user_streaks')
-        .select('current_streak')
-        .eq('user_id', currentUserId)
-        .eq('group_id', currentGroup.id)
-        .single();
-
-      setUserStreak(streakData?.current_streak || 0);
+      // Set streak
+      const streakData = streakResult as { data: any };
+      setUserStreak(streakData?.data?.current_streak || 0);
     } catch (error) {
       console.error('Error in fetchDevotionals:', error);
     } finally {
@@ -124,6 +141,7 @@ export const useDevotionals = (selectedDate: Date): UseDevotionalsReturn => {
 
   // Initial fetch
   useEffect(() => {
+    setLoading(true);
     fetchDevotionals();
   }, [fetchDevotionals]);
 

@@ -7,4 +7,6 @@ export { Input } from './Input';
 export { PillToggle } from './PillToggle';
 export { EmptyState } from './EmptyState';
 export { Header } from './Header';
+export { ChallengeCard } from './ChallengeCard';
+export { ChallengeDetailModal } from './ChallengeDetailModal';
 

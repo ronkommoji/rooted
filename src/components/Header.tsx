@@ -84,5 +84,6 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 28,
     fontWeight: '700',
+    fontFamily: 'PlayfairDisplay_700Bold', // Playfair Display Bold font for app title
   },
 });

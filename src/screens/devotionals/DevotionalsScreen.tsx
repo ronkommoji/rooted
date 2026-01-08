@@ -26,7 +26,7 @@ import {
 import { useDevotionals } from './hooks';
 
 export const DevotionalsScreen: React.FC = () => {
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
   const { session } = useAppStore();
 
   // State
@@ -101,20 +101,6 @@ export const DevotionalsScreen: React.FC = () => {
     setSelectedDate(date);
   };
 
-  if (loading) {
-    return (
-      <SafeAreaView
-        style={[styles.container, styles.loadingContainer, { backgroundColor: colors.background }]}
-        edges={['top']}
-      >
-        <ActivityIndicator size="large" color={colors.primary} />
-        <Text style={[styles.loadingText, { color: colors.textSecondary }]}>
-          Loading devotionals...
-        </Text>
-      </SafeAreaView>
-    );
-  }
-
   return (
     <SafeAreaView
       style={[styles.container, { backgroundColor: colors.background }]}
@@ -130,6 +116,13 @@ export const DevotionalsScreen: React.FC = () => {
         }
         showsVerticalScrollIndicator={false}
       >
+        {/* Loading indicator (non-blocking) */}
+        {loading && !refreshing && (
+          <View style={styles.loadingOverlay}>
+            <ActivityIndicator size="small" color={isDark ? '#3D5A50' : colors.primary} />
+          </View>
+        )}
+
         {/* Week/Day Picker */}
         <WeekDayPicker
           weekStart={weekStart}
@@ -186,7 +179,7 @@ export const DevotionalsScreen: React.FC = () => {
                 </Text>
                 {!currentUserHasPosted && (
                   <TouchableOpacity
-                    style={[styles.addButton, { backgroundColor: colors.primary }]}
+                    style={[styles.addButton, { backgroundColor: isDark ? '#3D5A50' : colors.primary }]}
                     onPress={() => setShowAddSheet(true)}
                   >
                     <Ionicons name="add" size={20} color="#FFFFFF" />
@@ -220,7 +213,7 @@ export const DevotionalsScreen: React.FC = () => {
       {/* FAB for adding devotional */}
       {!currentUserHasPosted && feedSubmissions.length > 0 && (
         <TouchableOpacity
-          style={[styles.fab, { backgroundColor: colors.primary }]}
+          style={[styles.fab, { backgroundColor: isDark ? '#3D5A50' : colors.primary }]}
           onPress={() => setShowAddSheet(true)}
         >
           <Ionicons name="add" size={28} color="#FFFFFF" />
@@ -250,13 +243,10 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  loadingContainer: {
-    justifyContent: 'center',
+  loadingOverlay: {
     alignItems: 'center',
-  },
-  loadingText: {
-    marginTop: 16,
-    fontSize: 15,
+    paddingVertical: 8,
+    marginBottom: 8,
   },
   scrollView: {
     flex: 1,
