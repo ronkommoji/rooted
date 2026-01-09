@@ -15,7 +15,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../theme/ThemeContext';
-import { Card, Header, PillToggle, Button, Input, EmptyState } from '../../components';
+import { Card, Header, PillToggle, Button, Input, EmptyState, Avatar } from '../../components';
 import { useAppStore } from '../../store/useAppStore';
 import { supabase } from '../../lib/supabase';
 import { Event } from '../../types/database';
@@ -27,6 +27,12 @@ import { sendPushNotification } from '../../lib/notifications';
 type EventWithRsvps = Event & {
   rsvp_counts: { yes: number; no: number };
   user_rsvp: 'yes' | 'no' | null;
+};
+
+type Attendee = {
+  user_id: string;
+  full_name: string;
+  avatar_url: string | null;
 };
 
 export const EventsScreen: React.FC = () => {
@@ -65,6 +71,11 @@ export const EventsScreen: React.FC = () => {
   // Menu state
   const [showMenuModal, setShowMenuModal] = useState(false);
   const [selectedEvent, setSelectedEvent] = useState<EventWithRsvps | null>(null);
+
+  // Attendee list state
+  const [expandedEventId, setExpandedEventId] = useState<string | null>(null);
+  const [attendees, setAttendees] = useState<Record<string, Attendee[]>>({});
+  const [loadingAttendees, setLoadingAttendees] = useState<Record<string, boolean>>({});
 
   const fetchEvents = useCallback(async () => {
     if (!currentGroup?.id || !session?.user?.id) return;
@@ -118,6 +129,8 @@ export const EventsScreen: React.FC = () => {
 
     setEvents(eventsWithRsvps);
     setLoading(false);
+    // Clear expanded state when events change
+    setExpandedEventId(null);
   }, [currentGroup?.id, filter, session?.user?.id]);
 
   useEffect(() => {
@@ -379,6 +392,56 @@ export const EventsScreen: React.FC = () => {
     setEditEventNotes('');
   };
 
+  const fetchAttendees = async (eventId: string) => {
+    if (attendees[eventId]) {
+      // Already fetched, just toggle
+      setExpandedEventId(expandedEventId === eventId ? null : eventId);
+      return;
+    }
+
+    setLoadingAttendees(prev => ({ ...prev, [eventId]: true }));
+    setExpandedEventId(eventId);
+
+    try {
+      const { data: rsvps, error } = await supabase
+        .from('event_rsvps')
+        .select(`
+          user_id,
+          profiles (
+            id,
+            full_name,
+            avatar_url
+          )
+        `)
+        .eq('event_id', eventId)
+        .eq('status', 'yes');
+
+      if (error) throw error;
+
+      const attendeeList: Attendee[] = (rsvps || [])
+        .filter((rsvp: any) => rsvp.profiles) // Filter out any null profiles
+        .map((rsvp: any) => ({
+          user_id: rsvp.user_id,
+          full_name: rsvp.profiles.full_name || 'Unknown',
+          avatar_url: rsvp.profiles.avatar_url || null,
+        }));
+
+      setAttendees(prev => ({ ...prev, [eventId]: attendeeList }));
+    } catch (error) {
+      console.error('Error fetching attendees:', error);
+    } finally {
+      setLoadingAttendees(prev => ({ ...prev, [eventId]: false }));
+    }
+  };
+
+  const toggleAttendeeList = (eventId: string) => {
+    if (expandedEventId === eventId) {
+      setExpandedEventId(null);
+    } else {
+      fetchAttendees(eventId);
+    }
+  };
+
   const handleDeleteEvent = () => {
     if (!selectedEvent || !currentGroup?.id || !session?.user?.id) return;
 
@@ -523,13 +586,54 @@ export const EventsScreen: React.FC = () => {
 
         {/* Attendance Summary */}
         <View style={[styles.attendanceSummary, { borderTopColor: colors.cardBorder }]}>
-          <View style={styles.attendanceCount}>
+          <TouchableOpacity
+            style={styles.attendanceCount}
+            onPress={() => event.rsvp_counts.yes > 0 && toggleAttendeeList(event.id)}
+            disabled={event.rsvp_counts.yes === 0}
+            activeOpacity={event.rsvp_counts.yes > 0 ? 0.7 : 1}
+          >
             <Ionicons name="people-outline" size={16} color={colors.textSecondary} />
             <Text style={[styles.attendanceText, { color: colors.textSecondary }]}>
               {event.rsvp_counts.yes} going
             </Text>
-          </View>
+            {event.rsvp_counts.yes > 0 && (
+              <Ionicons
+                name={expandedEventId === event.id ? "chevron-up" : "chevron-down"}
+                size={16}
+                color={colors.textSecondary}
+                style={styles.chevronIcon}
+              />
+            )}
+          </TouchableOpacity>
         </View>
+
+        {/* Expanded Attendee List */}
+        {expandedEventId === event.id && (
+          <View style={[styles.attendeeList, { borderTopColor: colors.cardBorder }]}>
+            {loadingAttendees[event.id] ? (
+              <Text style={[styles.loadingText, { color: colors.textSecondary }]}>
+                Loading...
+              </Text>
+            ) : attendees[event.id] && attendees[event.id].length > 0 ? (
+              attendees[event.id].map((attendee) => (
+                <View key={attendee.user_id} style={styles.attendeeItem}>
+                  <Avatar
+                    name={attendee.full_name}
+                    imageUrl={attendee.avatar_url}
+                    size={32}
+                  />
+                  <Text style={[styles.attendeeName, { color: colors.text }]}>
+                    {attendee.full_name}
+                  </Text>
+                </View>
+              ))
+            ) : (
+              <Text style={[styles.emptyAttendeesText, { color: colors.textSecondary }]}>
+                No attendees yet
+              </Text>
+            )}
+          </View>
+        )}
 
         {/* RSVP Buttons */}
         <View style={styles.rsvpContainer}>
@@ -982,6 +1086,32 @@ const styles = StyleSheet.create({
   attendanceText: {
     fontSize: 13,
     fontWeight: '500',
+  },
+  chevronIcon: {
+    marginLeft: 4,
+  },
+  attendeeList: {
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    gap: 12,
+  },
+  attendeeItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  attendeeName: {
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  loadingText: {
+    fontSize: 13,
+    fontStyle: 'italic',
+  },
+  emptyAttendeesText: {
+    fontSize: 13,
+    fontStyle: 'italic',
   },
   rsvpContainer: {
     marginTop: 12,

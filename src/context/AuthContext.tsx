@@ -2,6 +2,7 @@ import React, { createContext, useContext, useEffect, useState, ReactNode } from
 import { Session } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
 import { useAppStore } from '../store/useAppStore';
+import { checkRateLimit, recordFailedAttempt, clearRateLimit } from '../lib/rateLimiter';
 
 interface AuthContextType {
   session: Session | null;
@@ -69,24 +70,91 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   }, []);
 
   const signUp = async (email: string, password: string, fullName: string) => {
-    const { error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        data: {
-          full_name: fullName,
-        },
-      },
+    // Check rate limit before attempting signup
+    const rateLimitCheck = await checkRateLimit(email, {
+      maxAttempts: 3, // Stricter limit for signup
+      windowMs: 15 * 60 * 1000, // 15 minutes
+      blockDurationMs: 30 * 60 * 1000, // 30 minutes
+      minDelayMs: 2000, // 2 seconds between attempts
     });
-    if (error) throw error;
+
+    if (!rateLimitCheck.allowed) {
+      const error = new Error(rateLimitCheck.message);
+      (error as any).code = 'RATE_LIMIT_EXCEEDED';
+      (error as any).retryAfter = rateLimitCheck.retryAfter;
+      throw error;
+    }
+
+    try {
+      const { error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: {
+            full_name: fullName,
+          },
+        },
+      });
+
+      if (error) {
+        // Record failed attempt for rate limiting
+        await recordFailedAttempt(email, {
+          maxAttempts: 3,
+          windowMs: 15 * 60 * 1000,
+          blockDurationMs: 30 * 60 * 1000,
+        });
+        throw error;
+      }
+
+      // Clear rate limit on successful signup
+      await clearRateLimit(email);
+    } catch (error) {
+      throw error;
+    }
   };
 
   const signIn = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
+    // Check rate limit before attempting signin
+    const rateLimitCheck = await checkRateLimit(email, {
+      maxAttempts: 5, // 5 attempts for login
+      windowMs: 15 * 60 * 1000, // 15 minutes
+      blockDurationMs: 30 * 60 * 1000, // 30 minutes
+      minDelayMs: 1000, // 1 second between attempts
     });
-    if (error) throw error;
+
+    if (!rateLimitCheck.allowed) {
+      const error = new Error(rateLimitCheck.message);
+      (error as any).code = 'RATE_LIMIT_EXCEEDED';
+      (error as any).retryAfter = rateLimitCheck.retryAfter;
+      throw error;
+    }
+
+    try {
+      const { error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+
+      if (error) {
+        // Record failed attempt for rate limiting
+        // Only count actual authentication failures, not network errors
+        if (error.message.includes('Invalid login credentials') || 
+            error.message.includes('Email not confirmed') ||
+            error.message.includes('User not found')) {
+          await recordFailedAttempt(email, {
+            maxAttempts: 5,
+            windowMs: 15 * 60 * 1000,
+            blockDurationMs: 30 * 60 * 1000,
+          });
+        }
+        throw error;
+      }
+
+      // Clear rate limit on successful signin
+      await clearRateLimit(email);
+    } catch (error) {
+      throw error;
+    }
   };
 
   const signOut = async () => {

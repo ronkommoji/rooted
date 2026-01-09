@@ -39,8 +39,32 @@ const storage = {
   },
 };
 
-export const supabaseUrl = 'https://bmwyusrojmrlmintpjks.supabase.co';
-const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJtd3l1c3Jvam1ybG1pbnRwamtzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njc3NDk2MDAsImV4cCI6MjA4MzMyNTYwMH0.5_vGwdT6X5U7KMdtblpyvWcsm-5xoSEMiORPetQqfgs';
+// Get Supabase credentials from environment variables
+// For Expo, use EXPO_PUBLIC_ prefix for client-accessible variables
+const getSupabaseUrl = (): string => {
+  const url = process.env.EXPO_PUBLIC_SUPABASE_URL;
+  if (!url) {
+    throw new Error(
+      'Missing EXPO_PUBLIC_SUPABASE_URL environment variable. ' +
+      'Please create a .env file with your Supabase URL.'
+    );
+  }
+  return url;
+};
+
+const getSupabaseAnonKey = (): string => {
+  const key = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
+  if (!key) {
+    throw new Error(
+      'Missing EXPO_PUBLIC_SUPABASE_ANON_KEY environment variable. ' +
+      'Please create a .env file with your Supabase anon key.'
+    );
+  }
+  return key;
+};
+
+export const supabaseUrl = getSupabaseUrl();
+const supabaseAnonKey = getSupabaseAnonKey();
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {

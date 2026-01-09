@@ -63,13 +63,18 @@ Rooted is a faith-centered mobile app designed to help Christian small groups st
    npm install
    ```
 
-3. **Set up environment variables** (optional)
+3. **Set up environment variables** (required)
    
-   Create a `.env` file in the root directory:
+   Create a `.env` file in the root directory (copy from `.env.example`):
    ```env
    EXPO_PUBLIC_SUPABASE_URL=your_supabase_url
    EXPO_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
    ```
+   
+   **Important:** Get these values from your Supabase project settings:
+   - Go to https://app.supabase.com/project/_/settings/api
+   - Copy the "Project URL" for `EXPO_PUBLIC_SUPABASE_URL`
+   - Copy the "anon public" key for `EXPO_PUBLIC_SUPABASE_ANON_KEY`
 
 4. **Start the development server**
    ```bash

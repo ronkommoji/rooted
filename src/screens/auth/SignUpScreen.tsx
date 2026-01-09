@@ -56,7 +56,16 @@ export const SignUpScreen: React.FC<Props> = ({ navigation }) => {
         [{ text: 'OK', onPress: () => navigation.navigate('SignIn') }]
       );
     } catch (error: any) {
-      Alert.alert('Error', error.message || 'Failed to create account');
+      // Handle rate limit errors with special messaging
+      if (error.code === 'RATE_LIMIT_EXCEEDED') {
+        Alert.alert(
+          'Too Many Attempts',
+          error.message || 'Please wait before trying again.',
+          [{ text: 'OK' }]
+        );
+      } else {
+        Alert.alert('Error', error.message || 'Failed to create account');
+      }
     } finally {
       setLoading(false);
     }

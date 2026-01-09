@@ -39,7 +39,16 @@ export const SignInScreen: React.FC<Props> = ({ navigation }) => {
     try {
       await signIn(email, password);
     } catch (error: any) {
-      Alert.alert('Error', error.message || 'Failed to sign in');
+      // Handle rate limit errors with special messaging
+      if (error.code === 'RATE_LIMIT_EXCEEDED') {
+        Alert.alert(
+          'Too Many Attempts',
+          error.message || 'Please wait before trying again.',
+          [{ text: 'OK' }]
+        );
+      } else {
+        Alert.alert('Error', error.message || 'Failed to sign in');
+      }
     } finally {
       setLoading(false);
     }

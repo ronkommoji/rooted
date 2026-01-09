@@ -3,7 +3,7 @@ import * as Device from 'expo-device';
 import Constants from 'expo-constants';
 import { Platform } from 'react-native';
 import { format, addDays, isBefore, differenceInHours, startOfDay, isSameDay } from 'date-fns';
-import { supabase } from './supabase';
+import { supabase, supabaseUrl } from './supabase';
 
 // Configure notification behavior with conditional logic for devotional reminders
 Notifications.setNotificationHandler({
@@ -479,7 +479,7 @@ export async function sendPushNotification(
 
     // Edge Function now has verify_jwt: false, so we don't need auth header
     // But we can still include it for logging/security
-    const supabaseUrl = 'https://bmwyusrojmrlmintpjks.supabase.co';
+    // Import supabaseUrl from supabase config instead of hardcoding
     const response = await fetch(
       `${supabaseUrl}/functions/v1/send-push-notification`,
       {
