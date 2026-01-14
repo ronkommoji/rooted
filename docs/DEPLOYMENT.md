@@ -39,17 +39,84 @@ This automatically:
    - Add testers by their Apple ID emails
    - They'll receive an email invitation to install via TestFlight app
 
+## Accessing Specific Builds on Your Device
+
+### Before Submitting to TestFlight
+
+To test a specific build (e.g., build 9) on your phone before submitting to TestFlight:
+
+#### Method 1: Using Build ID (Recommended)
+
+1. **Find your build ID:**
+   ```bash
+   eas build:list --platform ios --limit 10
+   ```
+   Look for the build number you want (e.g., build 9) and copy its **Build ID**
+
+2. **View build details:**
+   ```bash
+   eas build:view [BUILD_ID]
+   ```
+   Example: `eas build:view 7d4d3136-7d3b-412b-b029-1a1fe290b524`
+
+3. **Access the build on your phone:**
+   - Copy the **Logs URL** from the build output (format: `https://expo.dev/accounts/rkommoji7/projects/Rooted/builds/[BUILD_ID]`)
+   - Open this URL on your iPhone's Safari browser
+   - The page will show a **QR code and install link** for internal distribution builds
+   - Tap the install link or scan the QR code to install directly on your device
+
+#### Method 2: Using Preview Profile (For Testing Production Builds)
+
+For production builds, use the `preview` profile which allows direct installation:
+
+```bash
+# Build with preview profile (internal distribution)
+eas build --platform ios --profile preview
+
+# After build completes, use the Logs URL to install
+```
+
+The preview profile creates an internal distribution build that can be installed directly without TestFlight.
+
+#### Method 3: Filter by Build Number
+
+```bash
+# List builds filtered by build number
+eas build:list --platform ios --app-build-version 9
+
+# Then use eas build:view with the Build ID
+```
+
+### Important Notes
+
+- **Production builds** (`--profile production`) with `distribution: store` **cannot** be installed directly on devices - they must go through TestFlight or App Store
+- **Development builds** (`--profile development`) and **Preview builds** (`--profile preview`) can be installed directly via the build page URL
+- The build must be **finished** before you can install it
+- Build page URLs show QR codes and install links automatically for internal distribution builds
+
 ## Quick Reference Commands
 
 ```bash
 # Build for iOS
 eas build --platform ios --profile production
 
+# Build for testing (can install directly)
+eas build --platform ios --profile preview
+
 # Submit to TestFlight (after build completes)
 eas submit --platform ios --latest
 
+# Submit specific build to TestFlight
+eas submit --platform ios --id [BUILD_ID]
+
 # Check build status
 eas build:list
+
+# View specific build details
+eas build:view [BUILD_ID]
+
+# Filter builds by build number
+eas build:list --platform ios --app-build-version 9
 
 # View project info
 eas project:info

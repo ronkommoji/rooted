@@ -8,6 +8,7 @@ import {
   GroupMemberWithProfile 
 } from '../types/database';
 import { Session } from '@supabase/supabase-js';
+import { withTimeout } from '../lib/asyncUtils';
 
 interface AppState {
   // Auth
@@ -68,14 +69,29 @@ export const useAppStore = create<AppState>((set, get) => ({
     const { session } = get();
     if (!session?.user?.id) return;
 
-    const { data, error } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('id', session.user.id)
-      .single();
+    try {
+      const { data, error } = await withTimeout(
+        supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', session.user.id)
+          .single(),
+        15000,
+        'Failed to fetch profile: timeout'
+      );
 
-    if (data && !error) {
-      set({ profile: data });
+      if (error) {
+        console.warn('Error fetching profile:', error.message);
+        // Don't throw - allow app to continue without profile
+        return;
+      }
+
+      if (data) {
+        set({ profile: data });
+      }
+    } catch (error) {
+      console.error('Error fetching profile:', error);
+      // Don't throw - allow app to continue
     }
   },
 
@@ -83,30 +99,51 @@ export const useAppStore = create<AppState>((set, get) => ({
     const { session } = get();
     if (!session?.user?.id) return;
 
-    // Get the user's first group membership with role
-    const { data: membership, error: memberError } = await supabase
-      .from('group_members')
-      .select('group_id, role')
-      .eq('user_id', session.user.id)
-      .limit(1)
-      .single();
+    try {
+      // Get the user's first group membership with role
+      const { data: membership, error: memberError } = await withTimeout(
+        supabase
+          .from('group_members')
+          .select('group_id, role')
+          .eq('user_id', session.user.id)
+          .limit(1)
+          .single(),
+        15000,
+        'Failed to fetch group membership: timeout'
+      );
 
-    if (memberError || !membership) {
+      if (memberError || !membership) {
+        // User has no group - this is valid, not an error
+        set({ currentGroup: null, currentUserRole: null });
+        return;
+      }
+
+      const { data: group, error } = await withTimeout(
+        supabase
+          .from('groups')
+          .select('*')
+          .eq('id', membership.group_id)
+          .single(),
+        15000,
+        'Failed to fetch group: timeout'
+      );
+
+      if (error) {
+        console.warn('Error fetching group:', error.message);
+        set({ currentGroup: null, currentUserRole: null });
+        return;
+      }
+
+      if (group) {
+        set({ 
+          currentGroup: group,
+          currentUserRole: membership.role as 'admin' | 'member' | null
+        });
+      }
+    } catch (error) {
+      console.error('Error fetching current group:', error);
+      // Set to null to allow app to continue (user will see onboarding)
       set({ currentGroup: null, currentUserRole: null });
-      return;
-    }
-
-    const { data: group, error } = await supabase
-      .from('groups')
-      .select('*')
-      .eq('id', membership.group_id)
-      .single();
-
-    if (group && !error) {
-      set({ 
-        currentGroup: group,
-        currentUserRole: membership.role as 'admin' | 'member' | null
-      });
     }
   },
 
@@ -131,14 +168,29 @@ export const useAppStore = create<AppState>((set, get) => ({
     const { session } = get();
     if (!session?.user?.id) return;
 
-    const { data, error } = await supabase
-      .from('user_preferences')
-      .select('*')
-      .eq('user_id', session.user.id)
-      .single();
+    try {
+      const { data, error } = await withTimeout(
+        supabase
+          .from('user_preferences')
+          .select('*')
+          .eq('user_id', session.user.id)
+          .single(),
+        15000,
+        'Failed to fetch preferences: timeout'
+      );
 
-    if (data && !error) {
-      set({ preferences: data });
+      if (error) {
+        console.warn('Error fetching preferences:', error.message);
+        // Don't throw - preferences are optional
+        return;
+      }
+
+      if (data) {
+        set({ preferences: data });
+      }
+    } catch (error) {
+      console.error('Error fetching preferences:', error);
+      // Don't throw - preferences are optional
     }
   },
 

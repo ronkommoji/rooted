@@ -1,10 +1,11 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   Modal,
   Image,
+  Pressable,
   TouchableOpacity,
   Dimensions,
   Animated,
@@ -40,10 +41,23 @@ export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({
   const [currentIndex, setCurrentIndex] = useState(
     initialIndex >= 0 ? initialIndex : 0
   );
+  const [isPaused, setIsPaused] = useState(false);
 
   const progressAnim = useRef(new Animated.Value(0)).current;
   const translateY = useRef(new Animated.Value(0)).current;
   const opacity = useRef(new Animated.Value(1)).current;
+  const animationRef = useRef<Animated.CompositeAnimation | null>(null);
+  const progressValue = useRef(0); // Track actual progress value for pause/resume
+
+  // Track progress value for pause/resume
+  useEffect(() => {
+    const listenerId = progressAnim.addListener(({ value }) => {
+      progressValue.current = value;
+    });
+    return () => {
+      progressAnim.removeListener(listenerId);
+    };
+  }, [progressAnim]);
 
   // Reset index when modal opens
   useEffect(() => {
@@ -51,30 +65,66 @@ export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({
       const idx = postedStories.findIndex((s) => s.memberId === initialMemberId);
       setCurrentIndex(idx >= 0 ? idx : 0);
       progressAnim.setValue(0);
+      progressValue.current = 0;
+      setIsPaused(false);
     }
   }, [visible, initialMemberId]);
 
-  // Auto-advance timer
-  useEffect(() => {
-    if (!visible || postedStories.length === 0) return;
-
-    progressAnim.setValue(0);
-    const animation = Animated.timing(progressAnim, {
+  // Start animation helper
+  const startAnimation = useCallback((fromValue: number = 0) => {
+    // Calculate remaining duration based on progress
+    const remainingDuration = AUTO_ADVANCE_DELAY * (1 - fromValue);
+    
+    if (fromValue === 0) {
+      progressAnim.setValue(0);
+    }
+    
+    animationRef.current = Animated.timing(progressAnim, {
       toValue: 1,
-      duration: AUTO_ADVANCE_DELAY,
+      duration: remainingDuration,
       useNativeDriver: false,
     });
 
-    animation.start(({ finished }) => {
+    animationRef.current.start(({ finished }) => {
       if (finished) {
         goToNext();
       }
     });
+  }, [progressAnim]);
+
+  // Stop animation helper
+  const stopAnimation = useCallback(() => {
+    if (animationRef.current) {
+      animationRef.current.stop();
+      animationRef.current = null;
+    }
+  }, []);
+
+  // Auto-advance timer
+  useEffect(() => {
+    if (!visible || postedStories.length === 0 || isPaused) return;
+
+    // Reset progress when changing stories
+    progressAnim.setValue(0);
+    progressValue.current = 0;
+    startAnimation(0);
 
     return () => {
-      animation.stop();
+      stopAnimation();
     };
-  }, [visible, currentIndex, postedStories.length]);
+  }, [visible, currentIndex, postedStories.length, isPaused, startAnimation, stopAnimation]);
+
+  // Handle pause/resume
+  const handlePauseStart = useCallback(() => {
+    setIsPaused(true);
+    stopAnimation();
+  }, [stopAnimation]);
+
+  const handlePauseEnd = useCallback(() => {
+    setIsPaused(false);
+    // Resume from where we paused
+    startAnimation(progressValue.current);
+  }, [startAnimation]);
 
   const goToNext = () => {
     if (currentIndex < postedStories.length - 1) {
@@ -226,17 +276,25 @@ export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({
         </SafeAreaView>
 
         {/* Image */}
-        <TouchableOpacity
-          activeOpacity={1}
-          onPress={handleScreenPress}
+        <Pressable
           style={styles.imageContainer}
+          onPress={handleScreenPress}
+          onLongPress={handlePauseStart}
+          onPressOut={handlePauseEnd}
+          delayLongPress={150}
         >
           <Image
             source={{ uri: currentStory.imageUrl || '' }}
             style={styles.image}
             resizeMode="contain"
           />
-        </TouchableOpacity>
+          {/* Optional: Visual indicator when paused */}
+          {isPaused && (
+            <View style={styles.pauseIndicator}>
+              <Ionicons name="pause" size={48} color="rgba(255,255,255,0.7)" />
+            </View>
+          )}
+        </Pressable>
       </Animated.View>
     </Modal>
   );
@@ -314,6 +372,16 @@ const styles = StyleSheet.create({
   image: {
     width: SCREEN_WIDTH,
     height: SCREEN_HEIGHT * 0.7,
+  },
+  pauseIndicator: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.2)',
   },
 });
 

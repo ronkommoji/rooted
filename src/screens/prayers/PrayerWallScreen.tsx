@@ -37,6 +37,7 @@ export const PrayerWallScreen: React.FC = () => {
   const [refreshing, setRefreshing] = useState(false);
   const [loading, setLoading] = useState(true);
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [answeredCount, setAnsweredCount] = useState(0);
   const [newPrayerTitle, setNewPrayerTitle] = useState('');
   const [newPrayerContent, setNewPrayerContent] = useState('');
   const [creating, setCreating] = useState(false);
@@ -81,7 +82,32 @@ export const PrayerWallScreen: React.FC = () => {
 
     setPrayers(prayersWithDetails);
     setLoading(false);
+
+    // If on Answered tab, update answered count
+    if (isAnswered) {
+      setAnsweredCount(prayersWithDetails.length);
+    }
   }, [currentGroup?.id, filter, session?.user?.id]);
+
+  // Fetch answered count separately for display
+  const fetchAnsweredCount = useCallback(async () => {
+    if (!currentGroup?.id) return;
+
+    const { count, error } = await supabase
+      .from('prayers')
+      .select('*', { count: 'exact', head: true })
+      .eq('group_id', currentGroup.id)
+      .eq('is_answered', true);
+
+    if (!error) {
+      setAnsweredCount(count || 0);
+    }
+  }, [currentGroup?.id]);
+
+  // Fetch answered count on mount and when prayers change
+  useEffect(() => {
+    fetchAnsweredCount();
+  }, [fetchAnsweredCount]);
 
   useEffect(() => {
     fetchPrayers();
@@ -183,13 +209,42 @@ export const PrayerWallScreen: React.FC = () => {
               })
               .eq('id', prayer.id);
 
-            if (!error) {
-              // Send notification for answered prayer
-              await sendPrayerNotification(
-                '🙏 Prayer Answered!',
-                `"${prayer.title}" has been marked as answered. Praise God!`,
-                prayer.id
-              );
+            if (!error && currentGroup?.id) {
+              // Send push notification to ALL group members for answered prayer
+              const { data: groupMembers } = await supabase
+                .from('group_members')
+                .select('user_id')
+                .eq('group_id', currentGroup.id);
+
+              if (groupMembers) {
+                // Get preferences for all members
+                const userIds = groupMembers.map(m => m.user_id);
+                const { data: preferences } = await supabase
+                  .from('user_preferences')
+                  .select('user_id, prayer_notifications')
+                  .in('user_id', userIds);
+
+                // Send push notification to each member with prayer_notifications enabled
+                const notifications = groupMembers
+                  .filter(member => {
+                    // Check if user has prayer_notifications enabled (default to true if not set)
+                    const userPrefs = preferences?.find(p => p.user_id === member.user_id);
+                    return userPrefs?.prayer_notifications !== false;
+                  })
+                  .map(member =>
+                    sendPushNotification(
+                      member.user_id,
+                      '🙏 Prayer Answered!',
+                      `"${prayer.title}" has been marked as answered. Praise God!`,
+                      {
+                        type: 'prayer',
+                        id: prayer.id,
+                      }
+                    )
+                  );
+
+                await Promise.all(notifications);
+              }
               fetchPrayers();
             }
           },
@@ -411,6 +466,13 @@ export const PrayerWallScreen: React.FC = () => {
           selected={filter}
           onSelect={(option) => setFilter(option as 'Requests' | 'Answered')}
         />
+        {filter === 'Answered' && answeredCount > 0 && (
+          <View style={styles.countBadge}>
+            <Text style={[styles.countText, { color: colors.textSecondary }]}>
+              {answeredCount} answered {answeredCount === 1 ? 'prayer' : 'prayers'}
+            </Text>
+          </View>
+        )}
       </View>
 
       <FlatList
@@ -606,6 +668,14 @@ const styles = StyleSheet.create({
   filterContainer: {
     paddingHorizontal: 16,
     paddingBottom: 16,
+  },
+  countBadge: {
+    alignItems: 'center',
+    marginTop: 8,
+  },
+  countText: {
+    fontSize: 13,
+    fontWeight: '500',
   },
   list: {
     paddingHorizontal: 16,

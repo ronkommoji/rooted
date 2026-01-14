@@ -1,8 +1,10 @@
-import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
+import React, { createContext, useContext, useEffect, useRef, ReactNode } from 'react';
+import { AppState, AppStateStatus } from 'react-native';
 import { Session } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
 import { useAppStore } from '../store/useAppStore';
 import { checkRateLimit, recordFailedAttempt, clearRateLimit } from '../lib/rateLimiter';
+import { withTimeout, allSettledWithTimeout } from '../lib/asyncUtils';
 
 interface AuthContextType {
   session: Session | null;
@@ -15,59 +17,295 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  const { 
-    session, 
-    setSession, 
-    isLoading, 
+  const {
+    session,
+    setSession,
+    isLoading,
     setLoading,
     fetchProfile,
     fetchCurrentGroup,
     fetchPreferences,
-    signOut: storeSignOut 
+    signOut: storeSignOut
   } = useAppStore();
 
-  useEffect(() => {
-    // Get initial session
-    const initializeAuth = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      setSession(session);
-      if (session) {
-        // Await all fetches before setting loading to false
-        await Promise.all([
-          fetchProfile(),
-          fetchCurrentGroup(),
-          fetchPreferences()
-        ]);
-      }
-      setLoading(false);
-    };
-    
-    initializeAuth();
+  // Prevent race conditions and concurrent initialization
+  const isInitializing = useRef(false);
+  const initializationTimeout = useRef<NodeJS.Timeout | null>(null);
+  const authStateChangeTimeout = useRef<NodeJS.Timeout | null>(null);
+  const isHandlingAuthChange = useRef(false);
+  const appState = useRef<AppStateStatus>(AppState.currentState);
+  const hasInitialized = useRef(false);
+  const backgroundedAt = useRef<number | null>(null);
+  const foregroundSafetyTimeout = useRef<NodeJS.Timeout | null>(null);
+  const maxLoadingTimeout = 30000; // 30 seconds maximum loading time
+  const foregroundSafetyDelayMs = 5000; // 5 seconds safety check after foreground
+  const backgroundThresholdMs = 30000; // 30 seconds - consider "long background" after this
 
-    // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (_event, session) => {
-        // Set loading true BEFORE updating session to prevent flash
-        if (session) {
-          setLoading(true);
+  useEffect(() => {
+    // Get initial session with comprehensive error handling
+    const initializeAuth = async (forceReinitialize = false) => {
+      // Prevent concurrent initialization (unless forced)
+      if (isInitializing.current && !forceReinitialize) {
+        console.warn('Auth initialization already in progress, skipping...');
+        return;
+      }
+
+      // If already initialized and not forced, skip
+      if (hasInitialized.current && !forceReinitialize) {
+        console.log('Auth already initialized, skipping...');
+        return;
+      }
+
+      isInitializing.current = true;
+
+      try {
+        // Set a maximum loading timeout as a safety net
+        initializationTimeout.current = setTimeout(() => {
+          console.warn('Auth initialization exceeded maximum timeout, forcing completion');
+          setLoading(false);
+          isInitializing.current = false;
+          hasInitialized.current = true;
+        }, maxLoadingTimeout);
+
+        // Get session with timeout
+        const { data: { session }, error: sessionError } = await withTimeout(
+          supabase.auth.getSession(),
+          10000, // 10 second timeout for session retrieval
+          'Failed to get session: timeout'
+        );
+
+        if (sessionError) {
+          console.error('Error getting session:', sessionError);
+          // Continue without session - user will see login screen
+          setSession(null);
+          return;
         }
-        
+
         setSession(session);
-        
+
         if (session) {
-          // Fetch all user data before showing the app
-          await Promise.all([
+          // Use allSettledWithTimeout to ensure all operations complete even if some fail
+          // This prevents the app from hanging if one fetch fails
+          const results = await allSettledWithTimeout([
             fetchProfile(),
             fetchCurrentGroup(),
             fetchPreferences()
-          ]);
-          setLoading(false);
+          ], 15000); // 15 second timeout per fetch
+
+          // Log any failures but don't block app initialization
+          results.forEach((result, index) => {
+            if (!result.success) {
+              const operationNames = ['fetchProfile', 'fetchCurrentGroup', 'fetchPreferences'];
+              console.warn(`Failed to ${operationNames[index]}:`, result.error?.message);
+            }
+          });
         }
+      } catch (error) {
+        console.error('Error during auth initialization:', error);
+        // Ensure we don't get stuck on loading screen
+        // App will continue with whatever data we have
+      } finally {
+        // ALWAYS clear loading state, even on error
+        if (initializationTimeout.current) {
+          clearTimeout(initializationTimeout.current);
+          initializationTimeout.current = null;
+        }
+        setLoading(false);
+        isInitializing.current = false;
+        hasInitialized.current = true;
+      }
+    };
+
+    // Helper to force reset all loading/auth state
+    const forceResetLoadingState = (reason: string) => {
+      console.log(`Force resetting loading state: ${reason}`);
+
+      // Clear all timeouts
+      if (initializationTimeout.current) {
+        clearTimeout(initializationTimeout.current);
+        initializationTimeout.current = null;
+      }
+      if (authStateChangeTimeout.current) {
+        clearTimeout(authStateChangeTimeout.current);
+        authStateChangeTimeout.current = null;
+      }
+      if (foregroundSafetyTimeout.current) {
+        clearTimeout(foregroundSafetyTimeout.current);
+        foregroundSafetyTimeout.current = null;
+      }
+
+      // Reset all flags
+      isInitializing.current = false;
+      isHandlingAuthChange.current = false;
+
+      // Force loading to false
+      setLoading(false);
+    };
+
+    // Handle app state changes (foreground/background)
+    const handleAppStateChange = (nextAppState: AppStateStatus) => {
+      // Track when app goes to background
+      if (nextAppState.match(/inactive|background/) && appState.current === 'active') {
+        backgroundedAt.current = Date.now();
+        console.log('App went to background');
+      }
+
+      // When app comes to foreground from background
+      if (
+        appState.current.match(/inactive|background/) &&
+        nextAppState === 'active'
+      ) {
+        console.log('App came to foreground, checking auth state...');
+
+        // Calculate how long we were in background
+        const timeInBackground = backgroundedAt.current
+          ? Date.now() - backgroundedAt.current
+          : 0;
+        console.log(`Time in background: ${timeInBackground}ms`);
+
+        // IMPORTANT: Get current loading state from store directly, not from closure
+        const currentIsLoading = useAppStore.getState().isLoading;
+
+        // If currently loading, reset immediately
+        if (currentIsLoading) {
+          forceResetLoadingState('was loading when returning to foreground');
+        }
+
+        // Always reset stuck flags when returning from long background
+        if (timeInBackground > backgroundThresholdMs) {
+          console.log('Long background detected, resetting stuck flags...');
+          isInitializing.current = false;
+          isHandlingAuthChange.current = false;
+
+          // Clear any pending auth state change timeout to prevent it from setting loading=true
+          if (authStateChangeTimeout.current) {
+            clearTimeout(authStateChangeTimeout.current);
+            authStateChangeTimeout.current = null;
+          }
+        }
+
+        // Set up a safety timeout - if we're STILL loading after a few seconds, force reset
+        // This catches cases where auth state change fires AFTER this handler
+        if (foregroundSafetyTimeout.current) {
+          clearTimeout(foregroundSafetyTimeout.current);
+        }
+        foregroundSafetyTimeout.current = setTimeout(() => {
+          const stillLoading = useAppStore.getState().isLoading;
+          if (stillLoading) {
+            forceResetLoadingState('safety timeout - still loading after foreground');
+          }
+          foregroundSafetyTimeout.current = null;
+        }, foregroundSafetyDelayMs);
+
+        backgroundedAt.current = null;
+      }
+
+      appState.current = nextAppState;
+    };
+
+    // Subscribe to app state changes
+    const appStateSubscription = AppState.addEventListener('change', handleAppStateChange);
+    
+    initializeAuth();
+
+    // Prevent concurrent auth state change handling
+    const handleAuthStateChange = async (event: string, newSession: Session | null) => {
+      // Skip if we're still initializing or already handling a change
+      if (isInitializing.current || isHandlingAuthChange.current) {
+        console.log('Skipping auth state change - initialization or previous change in progress');
+        return;
+      }
+
+      // Clear any pending timeout
+      if (authStateChangeTimeout.current) {
+        clearTimeout(authStateChangeTimeout.current);
+      }
+
+      // Check if this is a TOKEN_REFRESHED event after returning from background
+      // In this case, we don't need to refetch data - just update the session
+      const isTokenRefresh = event === 'TOKEN_REFRESHED';
+      const currentSession = useAppStore.getState().session;
+      const sessionUserUnchanged = currentSession?.user?.id === newSession?.user?.id;
+
+      // If it's just a token refresh and user is the same, skip expensive refetch
+      if (isTokenRefresh && sessionUserUnchanged && newSession) {
+        console.log('Token refreshed, skipping data refetch (session user unchanged)');
+        setSession(newSession);
+        return;
+      }
+
+      // Debounce rapid auth state changes
+      authStateChangeTimeout.current = setTimeout(async () => {
+        isHandlingAuthChange.current = true;
+
+        try {
+          // Only set loading if we're actually going to fetch data
+          // and the session is changing (not just refreshing)
+          const needsDataFetch = newSession && !sessionUserUnchanged;
+
+          if (needsDataFetch) {
+            setLoading(true);
+          }
+
+          setSession(newSession);
+
+          if (newSession && needsDataFetch) {
+            // Fetch all user data before showing the app
+            // Use allSettledWithTimeout to handle failures gracefully
+            const results = await allSettledWithTimeout([
+              fetchProfile(),
+              fetchCurrentGroup(),
+              fetchPreferences()
+            ], 15000);
+
+            // Log any failures but don't block
+            results.forEach((result, index) => {
+              if (!result.success) {
+                const operationNames = ['fetchProfile', 'fetchCurrentGroup', 'fetchPreferences'];
+                console.warn(`Failed to ${operationNames[index]} during auth change:`, result.error?.message);
+              }
+            });
+          }
+        } catch (error) {
+          console.error('Error handling auth state change:', error);
+        } finally {
+          // ALWAYS clear loading state
+          setLoading(false);
+          isHandlingAuthChange.current = false;
+        }
+      }, 300); // 300ms debounce
+    };
+
+    // Listen for auth changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      (event, newSession) => {
+        handleAuthStateChange(event, newSession);
       }
     );
 
-    return () => subscription.unsubscribe();
-  }, []);
+    return () => {
+      if (initializationTimeout.current) {
+        clearTimeout(initializationTimeout.current);
+        initializationTimeout.current = null;
+      }
+      if (authStateChangeTimeout.current) {
+        clearTimeout(authStateChangeTimeout.current);
+        authStateChangeTimeout.current = null;
+      }
+      if (foregroundSafetyTimeout.current) {
+        clearTimeout(foregroundSafetyTimeout.current);
+        foregroundSafetyTimeout.current = null;
+      }
+      appStateSubscription.remove();
+      subscription.unsubscribe();
+      isInitializing.current = false;
+      isHandlingAuthChange.current = false;
+      hasInitialized.current = false;
+      backgroundedAt.current = null;
+    };
+    // Note: We intentionally don't include isLoading in deps anymore
+    // because we now read it directly from the store via getState()
+  }, [setSession, setLoading, fetchProfile, fetchCurrentGroup, fetchPreferences]);
 
   const signUp = async (email: string, password: string, fullName: string) => {
     // Check rate limit before attempting signup

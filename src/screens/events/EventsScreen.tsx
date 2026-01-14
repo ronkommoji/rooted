@@ -44,6 +44,7 @@ export const EventsScreen: React.FC = () => {
   const [events, setEvents] = useState<EventWithRsvps[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [pastEventsCount, setPastEventsCount] = useState(0);
   
   // Create event state
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -131,11 +132,36 @@ export const EventsScreen: React.FC = () => {
     setLoading(false);
     // Clear expanded state when events change
     setExpandedEventId(null);
+    
+    // Update past events count if on Past tab
+    if (filter === 'Past') {
+      setPastEventsCount(eventsWithRsvps.length);
+    }
   }, [currentGroup?.id, filter, session?.user?.id]);
+
+  // Fetch past events count separately
+  const fetchPastEventsCount = useCallback(async () => {
+    if (!currentGroup?.id) return;
+
+    const now = new Date().toISOString();
+    const { count, error } = await supabase
+      .from('events')
+      .select('*', { count: 'exact', head: true })
+      .eq('group_id', currentGroup.id)
+      .lt('event_date', now);
+
+    if (!error) {
+      setPastEventsCount(count || 0);
+    }
+  }, [currentGroup?.id]);
 
   useEffect(() => {
     fetchEvents();
   }, [fetchEvents]);
+
+  useEffect(() => {
+    fetchPastEventsCount();
+  }, [fetchPastEventsCount]);
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -526,6 +552,9 @@ export const EventsScreen: React.FC = () => {
     const isUserGoing = event.user_rsvp === 'yes';
     const isUserNotGoing = event.user_rsvp === 'no';
     const isOwnEvent = event.created_by === session?.user?.id;
+    // Show menu for all group members (anyone can edit, but only creator can delete)
+    // Since events are already filtered by currentGroup.id, if we're viewing events, we're in a group
+    const canEditEvent = !!currentGroup && !!session && !!event.group_id;
     
     return (
       <Card style={styles.eventCard}>
@@ -533,7 +562,7 @@ export const EventsScreen: React.FC = () => {
           <Text style={[styles.eventTitle, { color: colors.text }]}>
             {event.title}
           </Text>
-          {isOwnEvent && (
+          {canEditEvent && (
             <TouchableOpacity
               onPress={() => handleOpenMenu(event)}
               style={styles.menuButton}
@@ -700,6 +729,13 @@ export const EventsScreen: React.FC = () => {
           selected={filter}
           onSelect={(option) => setFilter(option as 'Upcoming' | 'Past')}
         />
+        {filter === 'Past' && pastEventsCount > 0 && (
+          <View style={styles.countBadge}>
+            <Text style={[styles.countText, { color: colors.textSecondary }]}>
+              {pastEventsCount} past {pastEventsCount === 1 ? 'event' : 'events'}
+            </Text>
+          </View>
+        )}
       </View>
 
       <FlatList
@@ -993,17 +1029,22 @@ export const EventsScreen: React.FC = () => {
               </Text>
             </TouchableOpacity>
             
-            <View style={[styles.menuDivider, { backgroundColor: colors.cardBorder }]} />
-            
-            <TouchableOpacity
-              style={styles.menuItem}
-              onPress={handleDeleteEvent}
-            >
-              <Ionicons name="trash-outline" size={22} color={colors.error} />
-              <Text style={[styles.menuItemText, { color: colors.error }]}>
-                Delete
-              </Text>
-            </TouchableOpacity>
+            {/* Only show delete option for event creator */}
+            {selectedEvent?.created_by === session?.user?.id && (
+              <>
+                <View style={[styles.menuDivider, { backgroundColor: colors.cardBorder }]} />
+                
+                <TouchableOpacity
+                  style={styles.menuItem}
+                  onPress={handleDeleteEvent}
+                >
+                  <Ionicons name="trash-outline" size={22} color={colors.error} />
+                  <Text style={[styles.menuItemText, { color: colors.error }]}>
+                    Delete
+                  </Text>
+                </TouchableOpacity>
+              </>
+            )}
             
             <View style={[styles.menuDivider, { backgroundColor: colors.cardBorder }]} />
             
@@ -1030,6 +1071,14 @@ const styles = StyleSheet.create({
   filterContainer: {
     paddingHorizontal: 16,
     paddingBottom: 16,
+  },
+  countBadge: {
+    alignItems: 'center',
+    marginTop: 8,
+  },
+  countText: {
+    fontSize: 13,
+    fontWeight: '500',
   },
   list: {
     paddingHorizontal: 16,

@@ -65,8 +65,7 @@ export const AddDevotionalSheet: React.FC<AddDevotionalSheetProps> = ({
     try {
       const result = await ImagePicker.launchCameraAsync({
         mediaTypes: ['images'],
-        allowsEditing: true,
-        aspect: [1, 1],
+        allowsEditing: false, // Allow full image without forced crop
         quality: 0.8,
       });
 
@@ -90,8 +89,7 @@ export const AddDevotionalSheet: React.FC<AddDevotionalSheetProps> = ({
     try {
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ['images'],
-        allowsEditing: true,
-        aspect: [1, 1],
+        allowsEditing: false, // Allow full image without forced crop - Instagram style
         quality: 0.8,
       });
 
