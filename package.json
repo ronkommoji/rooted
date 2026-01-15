@@ -17,7 +17,9 @@
     "@react-navigation/bottom-tabs": "^7.9.0",
     "@react-navigation/native": "^7.1.26",
     "@react-navigation/native-stack": "^7.9.0",
+    "@shopify/react-native-skia": "^2.4.14",
     "@supabase/supabase-js": "^2.89.0",
+    "babel-preset-expo": "~54.0.9",
     "date-fns": "^4.1.0",
     "expo": "~54.0.31",
     "expo-constants": "~18.0.13",
@@ -33,10 +35,13 @@
     "react": "19.1.0",
     "react-dom": "^19.1.0",
     "react-native": "0.81.5",
+    "react-native-fiesta": "^0.7.0",
+    "react-native-reanimated": "^4.2.1",
     "react-native-safe-area-context": "^5.6.2",
     "react-native-screens": "~4.16.0",
     "react-native-url-polyfill": "^3.0.0",
     "react-native-web": "^0.21.2",
+    "react-native-worklets": "^0.7.0",
     "zustand": "^5.0.9"
   },
   "devDependencies": {

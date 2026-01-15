@@ -118,6 +118,18 @@ eas build:view [BUILD_ID]
 # Filter builds by build number
 eas build:list --platform ios --app-build-version 9
 
+# OTA Update
+eas update --branch production --message "Description of changes"
+
+# List OTA updates on a branch
+eas update:list --branch production
+
+# View specific OTA update
+eas update:view [UPDATE_ID]
+
+# Revert OTA update (republish previous version)
+eas update --branch production --message "Reverting to stable version"
+
 # View project info
 eas project:info
 ```
@@ -154,6 +166,7 @@ eas update --branch production --message "Description of changes"
 Use EAS Update (OTA) - fastest way:
 ```bash
 eas update --branch production --message "Fixed bug in prayer wall"
+eas update --branch developement --message "Some bugs in the devotionals upload and comments"
 ```
 Users get the update automatically next time they open the app!
 
@@ -166,6 +179,76 @@ eas build --platform ios --profile production
 # 3. Submit
 eas submit --platform ios --latest
 ```
+
+## Reverting OTA Updates
+
+If you deploy an OTA update and discover issues, you can quickly revert to the previous stable version.
+
+### Method 1: Republish Previous Version (Recommended)
+
+1. **Find the previous stable commit:**
+   ```bash
+   git log --oneline
+   ```
+   Identify the commit hash before the problematic update.
+
+2. **Checkout that commit:**
+   ```bash
+   git checkout [previous-commit-hash]
+   ```
+
+3. **Publish to the same branch:**
+   ```bash
+   eas update --branch production --message "Reverting to stable version"
+   ```
+   This overwrites the bad update with the previous version.
+
+4. **Switch back to your main branch:**
+   ```bash
+   git checkout main  # or your main branch name
+   ```
+
+### Method 2: List and View Updates
+
+Check what updates are on a branch:
+
+```bash
+# List updates on a branch
+eas update:list --branch production
+
+# View details of a specific update
+eas update:view [UPDATE_ID]
+```
+
+### Method 3: Point Branch to Specific Update
+
+If you know the update ID of the good version:
+
+```bash
+# Point the branch to a specific update
+eas update:republish --branch production --update-id [GOOD_UPDATE_ID]
+```
+
+### Important Notes About Reverting
+
+- **Immediate effect**: Users get the previous version on their next app open
+- **No rebuild needed**: OTA updates are JavaScript-only, so reverting is instant
+- **Branch-based**: Each branch (e.g., `production`, `development`) has its own update history
+- **Automatic rollback**: Users who already downloaded the bad update will automatically get the reverted version
+
+### Best Practices
+
+1. **Test on staging first:**
+   ```bash
+   eas update --branch staging --message "Test update"
+   ```
+
+2. **Use descriptive messages:**
+   ```bash
+   eas update --branch production --message "Revert: Fixed critical bug in v1.0.2"
+   ```
+
+3. **Keep a record**: Note which update IDs are stable for quick rollback
 
 ## Version Management
 

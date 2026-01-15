@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -11,8 +11,10 @@ import {
   Platform,
   ActivityIndicator,
   Alert,
+  Keyboard,
+  Dimensions,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../../theme/ThemeContext';
 import { supabase } from '../../../lib/supabase';
@@ -50,6 +52,10 @@ export const CommentsModal: React.FC<CommentsModalProps> = ({
   const [loading, setLoading] = useState(false);
   const [newComment, setNewComment] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const flatListRef = useRef<FlatList>(null);
+  const previousCountRef = useRef<number>(0);
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
+  const insets = useSafeAreaInsets();
 
   const fetchComments = useCallback(async () => {
     if (!devotionalId) return;
@@ -70,41 +76,97 @@ export const CommentsModal: React.FC<CommentsModalProps> = ({
         .order('created_at', { ascending: true });
 
       if (error) throw error;
-      setComments(data || []);
-      onCommentCountChange?.(data?.length || 0);
+      const commentsData = data || [];
+      const newCount = commentsData.length;
+      setComments(commentsData);
+      // Only call onCommentCountChange when count actually changes
+      if (newCount !== previousCountRef.current) {
+        previousCountRef.current = newCount;
+        onCommentCountChange?.(newCount);
+      }
     } catch (error) {
       console.error('Error fetching comments:', error);
     } finally {
       setLoading(false);
     }
-  }, [devotionalId, onCommentCountChange]);
+  }, [devotionalId]); // Removed onCommentCountChange from dependencies
 
   useEffect(() => {
     if (visible && devotionalId) {
+      previousCountRef.current = 0; // Reset count when opening modal
       fetchComments();
+    } else if (!visible) {
+      // Reset state when modal closes
+      setComments([]);
+      setLoading(false);
+      setNewComment('');
+      previousCountRef.current = 0;
     }
   }, [visible, devotionalId, fetchComments]);
+
+  // Function to scroll to bottom
+  const scrollToBottom = useCallback(() => {
+    if (comments.length > 0 && flatListRef.current) {
+      setTimeout(() => {
+        flatListRef.current?.scrollToEnd({ animated: true });
+      }, 150);
+    }
+  }, [comments.length]);
+
+  // Handle keyboard show/hide to track height and scroll to bottom
+  useEffect(() => {
+    if (!visible) {
+      setKeyboardHeight(0);
+      return;
+    }
+
+    const keyboardWillShow = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
+      (e) => {
+        setKeyboardHeight(e.endCoordinates.height);
+        // Scroll to bottom when keyboard opens
+        scrollToBottom();
+      }
+    );
+
+    const keyboardWillHide = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide',
+      () => {
+        setKeyboardHeight(0);
+      }
+    );
+
+    return () => {
+      keyboardWillShow.remove();
+      keyboardWillHide.remove();
+    };
+  }, [visible, scrollToBottom]);
 
   const handleSubmitComment = async () => {
     if (!newComment.trim() || !devotionalId || !session?.user?.id) return;
 
+    const commentText = newComment.trim();
     setSubmitting(true);
+    setNewComment(''); // Clear input immediately for better UX
+    
     try {
       const { error } = await supabase
         .from('devotional_comments')
         .insert({
           devotional_id: devotionalId,
           user_id: session.user.id,
-          content: newComment.trim(),
+          content: commentText,
         });
 
       if (error) throw error;
 
-      setNewComment('');
-      fetchComments();
+      // Refresh comments after successful post
+      await fetchComments();
     } catch (error: any) {
       console.error('Error posting comment:', error);
       Alert.alert('Error', 'Failed to post comment');
+      // Restore comment text on error
+      setNewComment(commentText);
     } finally {
       setSubmitting(false);
     }
@@ -204,7 +266,10 @@ export const CommentsModal: React.FC<CommentsModalProps> = ({
       presentationStyle="pageSheet"
       onRequestClose={onClose}
     >
-      <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+      <SafeAreaView 
+        style={[styles.container, { backgroundColor: colors.background }]} 
+        edges={['top']}
+      >
         {/* Header */}
         <View style={[styles.header, { borderBottomColor: colors.cardBorder }]}>
           <View style={styles.headerHandle} />
@@ -214,11 +279,16 @@ export const CommentsModal: React.FC<CommentsModalProps> = ({
           </TouchableOpacity>
         </View>
 
-        {/* Comments List */}
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          style={styles.keyboardView}
-          keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
+        {/* Comments List - Adjust bottom padding when keyboard is open */}
+        <View 
+          style={[
+            styles.contentContainer,
+            { 
+              paddingBottom: keyboardHeight > 0 
+                ? keyboardHeight + 68 // Keyboard height + input container height + padding
+                : 60 + insets.bottom // Input container height + safe area
+            }
+          ]}
         >
           {loading ? (
             <View style={styles.loadingContainer}>
@@ -236,19 +306,35 @@ export const CommentsModal: React.FC<CommentsModalProps> = ({
             </View>
           ) : (
             <FlatList
+              ref={flatListRef}
               data={comments}
               keyExtractor={(item) => item.id}
               renderItem={renderComment}
-              contentContainerStyle={styles.commentsList}
+              contentContainerStyle={[
+                styles.commentsList,
+                { paddingBottom: 16 }
+              ]}
               showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+              keyboardDismissMode="interactive"
+              onContentSizeChange={scrollToBottom}
             />
           )}
+        </View>
 
-          {/* Comment Input */}
-          <View style={[styles.inputContainer, { 
-            backgroundColor: colors.card, 
-            borderTopColor: colors.cardBorder 
-          }]}>
+        {/* Comment Input - Positioned above keyboard using absolute positioning */}
+        <View 
+          style={[
+            styles.inputContainer, 
+            styles.inputContainerAbsolute,
+            { 
+              backgroundColor: colors.card, 
+              borderTopColor: colors.cardBorder,
+              paddingBottom: keyboardHeight > 0 ? 8 : insets.bottom,
+              bottom: keyboardHeight > 0 ? keyboardHeight : 0,
+            }
+          ]}
+        >
             <View style={[styles.inputAvatar, { backgroundColor: isDark ? '#3D4D49' : '#E8E7E2' }]}>
               <Text style={[styles.inputAvatarText, { color: colors.text }]}>
                 {getInitials(profile?.full_name || 'You')}
@@ -263,8 +349,11 @@ export const CommentsModal: React.FC<CommentsModalProps> = ({
               placeholderTextColor={colors.textMuted}
               value={newComment}
               onChangeText={setNewComment}
+              onFocus={scrollToBottom}
               multiline
               maxLength={500}
+              returnKeyType="default"
+              blurOnSubmit={false}
             />
             <TouchableOpacity
               onPress={handleSubmitComment}
@@ -286,13 +375,15 @@ export const CommentsModal: React.FC<CommentsModalProps> = ({
               )}
             </TouchableOpacity>
           </View>
-        </KeyboardAvoidingView>
-      </SafeAreaView>
+        </SafeAreaView>
     </Modal>
   );
 };
 
 const styles = StyleSheet.create({
+  keyboardAvoidingView: {
+    flex: 1,
+  },
   container: {
     flex: 1,
   },
@@ -322,7 +413,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  keyboardView: {
+  contentContainer: {
     flex: 1,
   },
   loadingContainer: {
@@ -391,6 +482,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderTopWidth: 1,
+  },
+  inputContainerAbsolute: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
   },
   inputAvatar: {
     width: 32,

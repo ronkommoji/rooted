@@ -280,6 +280,27 @@ export const useDevotionals = (selectedDate: Date): UseDevotionalsReturn => {
 
       // Refresh data
       await fetchDevotionals();
+
+      // Check if all members have uploaded devotionals for this date
+      if (!existing && currentGroup?.id) {
+        const { 
+          checkAllDevotionalsComplete, 
+          createDevotionalCelebration 
+        } = await import('../../../services/celebrationService');
+        
+        const allComplete = await checkAllDevotionalsComplete(
+          currentGroup.id,
+          selectedDateISO
+        );
+
+        if (allComplete) {
+          // Create celebration records for all group members
+          await createDevotionalCelebration(currentGroup.id, selectedDateISO);
+          
+          // Note: Celebration will be shown automatically by CelebrationContext
+          // which checks for pending celebrations on app open and after certain events
+        }
+      }
     } catch (error) {
       console.error('Error adding devotional:', error);
       throw error;

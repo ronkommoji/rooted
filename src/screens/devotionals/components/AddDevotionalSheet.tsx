@@ -70,13 +70,16 @@ export const AddDevotionalSheet: React.FC<AddDevotionalSheetProps> = ({
       });
 
       if (!result.canceled && result.assets[0]?.uri) {
+        // Don't close modal here - let the parent handle closing after upload completes
         onImageSelected(result.assets[0].uri);
-        onClose();
+        // Keep loading state true - parent will handle closing and resetting
+      } else {
+        // User canceled - reset loading
+        setLoading(false);
       }
     } catch (error) {
       console.error('Error taking photo:', error);
       Alert.alert('Error', 'Failed to take photo. Please try again.');
-    } finally {
       setLoading(false);
     }
   };
@@ -94,13 +97,17 @@ export const AddDevotionalSheet: React.FC<AddDevotionalSheetProps> = ({
       });
 
       if (!result.canceled && result.assets[0]?.uri) {
+        // Don't close modal here - let the parent handle closing after upload completes
+        // The parent will close the modal when upload finishes
         onImageSelected(result.assets[0].uri);
-        onClose();
+        // Keep loading state true - parent will handle closing and resetting
+      } else {
+        // User canceled - reset loading
+        setLoading(false);
       }
     } catch (error) {
       console.error('Error selecting image:', error);
       Alert.alert('Error', 'Failed to select image. Please try again.');
-    } finally {
       setLoading(false);
     }
   };
@@ -110,15 +117,23 @@ export const AddDevotionalSheet: React.FC<AddDevotionalSheetProps> = ({
       visible={visible}
       animationType="slide"
       presentationStyle="pageSheet"
-      onRequestClose={onClose}
+      onRequestClose={isLoading ? undefined : onClose}
     >
       <SafeAreaView
         style={[styles.container, { backgroundColor: colors.background }]}
       >
         {/* Header */}
         <View style={styles.header}>
-          <TouchableOpacity onPress={onClose} style={styles.closeButton}>
-            <Ionicons name="close" size={24} color={colors.text} />
+          <TouchableOpacity 
+            onPress={isLoading ? undefined : onClose} 
+            style={[styles.closeButton, isLoading && styles.closeButtonDisabled]}
+            disabled={isLoading}
+          >
+            <Ionicons 
+              name="close" 
+              size={24} 
+              color={isLoading ? colors.textMuted : colors.text} 
+            />
           </TouchableOpacity>
           <Text style={[styles.title, { color: colors.text }]}>
             Add Today's Devotional
@@ -214,6 +229,9 @@ const styles = StyleSheet.create({
     height: 40,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  closeButtonDisabled: {
+    opacity: 0.5,
   },
   title: {
     fontSize: 17,

@@ -20,6 +20,7 @@ import { supabase } from '../../lib/supabase';
 import { Prayer, Profile } from '../../types/database';
 import { useNotifications } from '../../hooks/useNotifications';
 import { sendPushNotification } from '../../lib/notifications';
+import { useCelebration } from '../../context/CelebrationContext';
 
 type PrayerWithDetails = Prayer & { 
   profiles: Profile;
@@ -31,6 +32,7 @@ export const PrayerWallScreen: React.FC = () => {
   const { colors, isDark } = useTheme();
   const { currentGroup, profile, session } = useAppStore();
   const { sendPrayerNotification } = useNotifications();
+  const { showFireworks } = useCelebration();
   
   const [filter, setFilter] = useState<'Requests' | 'Answered'>('Requests');
   const [prayers, setPrayers] = useState<PrayerWithDetails[]>([]);
@@ -210,6 +212,13 @@ export const PrayerWallScreen: React.FC = () => {
               .eq('id', prayer.id);
 
             if (!error && currentGroup?.id) {
+              // Create celebration records for all group members
+              const { createPrayerAnsweredCelebration } = await import('../../services/celebrationService');
+              await createPrayerAnsweredCelebration(currentGroup.id, prayer.id);
+
+              // Show fireworks immediately for current user
+              showFireworks();
+              
               // Send push notification to ALL group members for answered prayer
               const { data: groupMembers } = await supabase
                 .from('group_members')

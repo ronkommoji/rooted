@@ -94,11 +94,11 @@ export const SubmissionCard: React.FC<SubmissionCardProps> = React.memo(({
     fetchCommentData();
   }, [fetchCommentData]);
 
-  const handleCommentCountChange = (count: number) => {
+  const handleCommentCountChange = useCallback((count: number) => {
     setCommentCount(count);
-    // Refresh preview comments when modal closes
+    // Refresh preview comments when comment count changes
     fetchCommentData();
-  };
+  }, [fetchCommentData]);
 
   // Load image dimensions and calculate aspect ratio
   useEffect(() => {
