@@ -804,54 +804,91 @@ export const EventsScreen: React.FC = () => {
                 <Text style={[styles.inputLabel, { color: colors.text }]}>Date & Time</Text>
                 <View style={styles.dateTimeRow}>
                   <TouchableOpacity 
-                    style={[styles.dateTimeButton, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}
-                    onPress={() => setShowDatePicker(true)}
+                    style={[
+                      styles.dateTimeButton, 
+                      { 
+                        backgroundColor: showDatePicker ? (isDark ? '#3D5A50' : colors.primary) : colors.card, 
+                        borderColor: colors.cardBorder 
+                      }
+                    ]}
+                    onPress={() => {
+                      setShowDatePicker(true);
+                      setShowTimePicker(false);
+                    }}
                   >
-                    <Ionicons name="calendar-outline" size={18} color={isDark ? '#3D5A50' : colors.primary} />
-                    <Text style={[styles.dateTimeText, { color: colors.text }]}>
+                    <Ionicons 
+                      name="calendar-outline" 
+                      size={18} 
+                      color={showDatePicker ? '#FFFFFF' : (isDark ? '#3D5A50' : colors.primary)} 
+                    />
+                    <Text style={[
+                      styles.dateTimeText, 
+                      { color: showDatePicker ? '#FFFFFF' : colors.text }
+                    ]}>
                       {format(eventDate, 'MMM d, yyyy')}
                     </Text>
                   </TouchableOpacity>
 
                   <TouchableOpacity 
-                    style={[styles.dateTimeButton, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}
-                    onPress={() => setShowTimePicker(true)}
+                    style={[
+                      styles.dateTimeButton, 
+                      { 
+                        backgroundColor: showTimePicker ? (isDark ? '#3D5A50' : colors.primary) : colors.card, 
+                        borderColor: colors.cardBorder 
+                      }
+                    ]}
+                    onPress={() => {
+                      setShowTimePicker(true);
+                      setShowDatePicker(false);
+                    }}
                   >
-                    <Ionicons name="time-outline" size={18} color={isDark ? '#3D5A50' : colors.primary} />
-                    <Text style={[styles.dateTimeText, { color: colors.text }]}>
+                    <Ionicons 
+                      name="time-outline" 
+                      size={18} 
+                      color={showTimePicker ? '#FFFFFF' : (isDark ? '#3D5A50' : colors.primary)} 
+                    />
+                    <Text style={[
+                      styles.dateTimeText, 
+                      { color: showTimePicker ? '#FFFFFF' : colors.text }
+                    ]}>
                       {format(eventDate, 'h:mm a')}
                     </Text>
                   </TouchableOpacity>
                 </View>
               </View>
 
-              {(showDatePicker || showTimePicker) && (
-                <DateTimePicker
-                  value={eventDate}
-                  mode={showDatePicker ? 'date' : 'time'}
-                  display="spinner"
-                  themeVariant="light"
-                  textColor="#000000"
-                  onChange={(_, date) => {
-                    if (Platform.OS === 'android') {
-                      setShowDatePicker(false);
-                      setShowTimePicker(false);
-                    }
-                    if (date) setEventDate(date);
-                  }}
-                />
+              {showDatePicker && (
+                <View style={styles.pickerContainer}>
+                  <DateTimePicker
+                    value={eventDate}
+                    mode="date"
+                    display={Platform.OS === 'ios' ? 'inline' : 'default'}
+                    themeVariant={isDark ? 'dark' : 'light'}
+                    onChange={(_, date) => {
+                      if (Platform.OS === 'android') {
+                        setShowDatePicker(false);
+                      }
+                      if (date) setEventDate(date);
+                    }}
+                  />
+                </View>
               )}
 
-              {Platform.OS === 'ios' && (showDatePicker || showTimePicker) && (
-                <TouchableOpacity 
-                  style={[styles.doneButton, { backgroundColor: isDark ? '#3D5A50' : colors.primary }]}
-                  onPress={() => {
-                    setShowDatePicker(false);
-                    setShowTimePicker(false);
-                  }}
-                >
-                  <Text style={styles.doneButtonText}>Done</Text>
-                </TouchableOpacity>
+              {showTimePicker && (
+                <View style={styles.pickerContainer}>
+                  <DateTimePicker
+                    value={eventDate}
+                    mode="time"
+                    display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                    themeVariant={isDark ? 'dark' : 'light'}
+                    onChange={(_, date) => {
+                      if (Platform.OS === 'android') {
+                        setShowTimePicker(false);
+                      }
+                      if (date) setEventDate(date);
+                    }}
+                  />
+                </View>
               )}
 
               <Input
@@ -921,54 +958,91 @@ export const EventsScreen: React.FC = () => {
                 <Text style={[styles.inputLabel, { color: colors.text }]}>Date & Time</Text>
                 <View style={styles.dateTimeRow}>
                   <TouchableOpacity 
-                    style={[styles.dateTimeButton, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}
-                    onPress={() => setShowEditDatePicker(true)}
+                    style={[
+                      styles.dateTimeButton, 
+                      { 
+                        backgroundColor: showEditDatePicker ? (isDark ? '#3D5A50' : colors.primary) : colors.card, 
+                        borderColor: colors.cardBorder 
+                      }
+                    ]}
+                    onPress={() => {
+                      setShowEditDatePicker(true);
+                      setShowEditTimePicker(false);
+                    }}
                   >
-                    <Ionicons name="calendar-outline" size={18} color={isDark ? '#3D5A50' : colors.primary} />
-                    <Text style={[styles.dateTimeText, { color: colors.text }]}>
+                    <Ionicons 
+                      name="calendar-outline" 
+                      size={18} 
+                      color={showEditDatePicker ? '#FFFFFF' : (isDark ? '#3D5A50' : colors.primary)} 
+                    />
+                    <Text style={[
+                      styles.dateTimeText, 
+                      { color: showEditDatePicker ? '#FFFFFF' : colors.text }
+                    ]}>
                       {format(editEventDate, 'MMM d, yyyy')}
                     </Text>
                   </TouchableOpacity>
 
                   <TouchableOpacity 
-                    style={[styles.dateTimeButton, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}
-                    onPress={() => setShowEditTimePicker(true)}
+                    style={[
+                      styles.dateTimeButton, 
+                      { 
+                        backgroundColor: showEditTimePicker ? (isDark ? '#3D5A50' : colors.primary) : colors.card, 
+                        borderColor: colors.cardBorder 
+                      }
+                    ]}
+                    onPress={() => {
+                      setShowEditTimePicker(true);
+                      setShowEditDatePicker(false);
+                    }}
                   >
-                    <Ionicons name="time-outline" size={18} color={isDark ? '#3D5A50' : colors.primary} />
-                    <Text style={[styles.dateTimeText, { color: colors.text }]}>
+                    <Ionicons 
+                      name="time-outline" 
+                      size={18} 
+                      color={showEditTimePicker ? '#FFFFFF' : (isDark ? '#3D5A50' : colors.primary)} 
+                    />
+                    <Text style={[
+                      styles.dateTimeText, 
+                      { color: showEditTimePicker ? '#FFFFFF' : colors.text }
+                    ]}>
                       {format(editEventDate, 'h:mm a')}
                     </Text>
                   </TouchableOpacity>
                 </View>
               </View>
 
-              {(showEditDatePicker || showEditTimePicker) && (
-                <DateTimePicker
-                  value={editEventDate}
-                  mode={showEditDatePicker ? 'date' : 'time'}
-                  display="spinner"
-                  themeVariant="light"
-                  textColor="#000000"
-                  onChange={(_, date) => {
-                    if (Platform.OS === 'android') {
-                      setShowEditDatePicker(false);
-                      setShowEditTimePicker(false);
-                    }
-                    if (date) setEditEventDate(date);
-                  }}
-                />
+              {showEditDatePicker && (
+                <View style={styles.pickerContainer}>
+                  <DateTimePicker
+                    value={editEventDate}
+                    mode="date"
+                    display={Platform.OS === 'ios' ? 'inline' : 'default'}
+                    themeVariant={isDark ? 'dark' : 'light'}
+                    onChange={(_, date) => {
+                      if (Platform.OS === 'android') {
+                        setShowEditDatePicker(false);
+                      }
+                      if (date) setEditEventDate(date);
+                    }}
+                  />
+                </View>
               )}
 
-              {Platform.OS === 'ios' && (showEditDatePicker || showEditTimePicker) && (
-                <TouchableOpacity 
-                  style={[styles.doneButton, { backgroundColor: isDark ? '#3D5A50' : colors.primary }]}
-                  onPress={() => {
-                    setShowEditDatePicker(false);
-                    setShowEditTimePicker(false);
-                  }}
-                >
-                  <Text style={styles.doneButtonText}>Done</Text>
-                </TouchableOpacity>
+              {showEditTimePicker && (
+                <View style={styles.pickerContainer}>
+                  <DateTimePicker
+                    value={editEventDate}
+                    mode="time"
+                    display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                    themeVariant={isDark ? 'dark' : 'light'}
+                    onChange={(_, date) => {
+                      if (Platform.OS === 'android') {
+                        setShowEditTimePicker(false);
+                      }
+                      if (date) setEditEventDate(date);
+                    }}
+                  />
+                </View>
               )}
 
               <Input
@@ -1228,6 +1302,10 @@ const styles = StyleSheet.create({
   },
   dateTimeSection: {
     marginBottom: 16,
+  },
+  pickerContainer: {
+    alignItems: 'center',
+    marginVertical: 16,
   },
   inputLabel: {
     fontSize: 14,
