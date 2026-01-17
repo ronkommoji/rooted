@@ -85,38 +85,6 @@ export const ChapterViewScreen: React.FC = () => {
     fetchVersesWithComments();
   };
 
-  const renderVerse = (verse: { verse: number; text: string }) => {
-    const hasComments = versesWithComments.has(verse.verse);
-    const verseText = verse.text;
-
-    return (
-      <TouchableOpacity
-        key={verse.verse}
-        onPress={() => handleVersePress(verse.verse)}
-        activeOpacity={0.7}
-        style={[
-          styles.verseContainer,
-          hasComments && {
-            backgroundColor: isDark
-              ? 'rgba(61, 90, 80, 0.3)'
-              : 'rgba(61, 90, 80, 0.1)',
-            borderLeftWidth: 4,
-            borderLeftColor: isDark ? '#3D5A50' : colors.primary,
-            paddingLeft: 12,
-            paddingVertical: 6,
-          },
-        ]}
-      >
-        <View style={styles.verseContent}>
-          <Text style={[styles.verseNumber, { color: isDark ? '#3D5A50' : colors.primary }]}>
-            {verse.verse}
-          </Text>
-          <Text style={[styles.verseText, { color: colors.text, fontWeight: 'bold' }]}>{verseText}</Text>
-        </View>
-      </TouchableOpacity>
-    );
-  };
-
   const selectedVerseText =
     selectedVerse && chapterData
       ? getVerseText(chapterData, selectedVerse)
@@ -151,7 +119,42 @@ export const ChapterViewScreen: React.FC = () => {
           contentContainerStyle={styles.content}
           showsVerticalScrollIndicator={false}
         >
-          {chapterData.verses.map((verse) => renderVerse(verse))}
+          <Text style={styles.chapterText}>
+            {chapterData.verses.map((verse, index) => {
+              const hasComments = versesWithComments.has(verse.verse);
+              const handlePress = () => handleVersePress(verse.verse);
+              return (
+                <Text
+                  key={verse.verse}
+                  onPress={handlePress}
+                  style={styles.verseWrapper}
+                >
+                  <Text
+                    style={[
+                      styles.verseNumber,
+                      hasComments && styles.verseNumberWithComments,
+                      { color: isDark ? '#3D5A50' : colors.primary },
+                      hasComments && {
+                        backgroundColor: isDark
+                          ? 'rgba(61, 90, 80, 0.3)'
+                          : 'rgba(61, 90, 80, 0.1)',
+                      },
+                    ]}
+                  >
+                    {verse.verse}
+                  </Text>
+                  <Text
+                    style={[
+                      styles.verseText,
+                      { color: colors.text },
+                    ]}
+                  >
+                    {'    '}{verse.text}{index < chapterData.verses.length - 1 ? ' ' : ''}
+                  </Text>
+                </Text>
+              );
+            })}
+          </Text>
         </ScrollView>
       ) : (
         <View style={styles.errorContainer}>
@@ -210,26 +213,27 @@ const styles = StyleSheet.create({
     padding: 20,
     paddingBottom: 40,
   },
-  verseContainer: {
-    marginBottom: 8,
-    paddingVertical: 4,
-    paddingHorizontal: 0,
-    borderRadius: 0,
-    backgroundColor: 'transparent',
+  chapterText: {
+    fontSize: 18,
+    lineHeight: 30,
+    fontWeight: '600',
   },
-  verseContent: {
-    flexDirection: 'row',
-    gap: 8,
+  verseWrapper: {
+    // Ensures the entire verse is tappable
   },
   verseNumber: {
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: '700',
-    minWidth: 28,
+    paddingHorizontal: 2,
+    marginRight: 7,
+  },
+  verseNumberWithComments: {
+    borderRadius: 3,
   },
   verseText: {
-    flex: 1,
-    fontSize: 16,
-    lineHeight: 22,
+    fontSize: 18,
+    lineHeight: 30,
+    fontWeight: '600',
   },
   errorContainer: {
     flex: 1,
