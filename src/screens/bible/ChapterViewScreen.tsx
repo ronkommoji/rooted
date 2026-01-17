@@ -124,33 +124,40 @@ export const ChapterViewScreen: React.FC = () => {
               const hasComments = versesWithComments.has(verse.verse);
               const handlePress = () => handleVersePress(verse.verse);
               return (
-                <Text
-                  key={verse.verse}
-                  onPress={handlePress}
-                  style={styles.verseWrapper}
-                >
+                <Text key={verse.verse}>
                   <Text
+                    onPress={handlePress}
                     style={[
-                      styles.verseNumber,
-                      hasComments && styles.verseNumberWithComments,
-                      { color: isDark ? '#3D5A50' : colors.primary },
+                      styles.verseWrapper,
                       hasComments && {
                         backgroundColor: isDark
                           ? 'rgba(61, 90, 80, 0.3)'
                           : 'rgba(61, 90, 80, 0.1)',
+                        borderRadius: 4,
+                        paddingHorizontal: 4,
+                        paddingVertical: 2,
                       },
                     ]}
                   >
-                    {verse.verse}
+                    <Text
+                      style={[
+                        styles.verseNumber,
+                        hasComments && styles.verseNumberWithComments,
+                        { color: isDark ? '#3D5A50' : colors.primary },
+                      ]}
+                    >
+                      {verse.verse}
+                    </Text>
+                    <Text
+                      style={[
+                        styles.verseText,
+                        { color: colors.text },
+                      ]}
+                    >
+                      {'  '}{verse.text}
+                    </Text>
                   </Text>
-                  <Text
-                    style={[
-                      styles.verseText,
-                      { color: colors.text },
-                    ]}
-                  >
-                    {'    '}{verse.text}{index < chapterData.verses.length - 1 ? ' ' : ''}
-                  </Text>
+                  {index < chapterData.verses.length - 1 && ' '}
                 </Text>
               );
             })}
