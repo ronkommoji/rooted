@@ -6,13 +6,16 @@ import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useTheme } from '../theme/ThemeContext';
 import { HomeScreen } from '../screens/home/HomeScreen';
 import { PrayerWallScreen } from '../screens/prayers/PrayerWallScreen';
+import { BibleScreen } from '../screens/bible/BibleScreen';
 import { DevotionalsScreen } from '../screens/devotionals/DevotionalsScreen';
 import { EventsScreen } from '../screens/events/EventsScreen';
 import { SettingsScreen } from '../screens/settings/SettingsScreen';
+import { ChapterViewScreen } from '../screens/bible/ChapterViewScreen';
 
 export type MainTabParamList = {
   Home: undefined;
   Prayers: undefined;
+  Bible: undefined;
   Devotionals: undefined;
   Events: undefined;
 };
@@ -20,6 +23,7 @@ export type MainTabParamList = {
 export type MainStackParamList = {
   MainTabs: undefined;
   Settings: undefined;
+  ChapterView: { book: string; chapter: number };
 };
 
 const Tab = createBottomTabNavigator<MainTabParamList>();
@@ -45,10 +49,18 @@ const TabIcon = ({ name, focused, color }: { name: string; focused: boolean; col
           color={color} 
         />
       );
-    case 'Devotionals':
+    case 'Bible':
       return (
         <Ionicons 
           name={focused ? 'book' : 'book-outline'} 
+          size={iconSize} 
+          color={color} 
+        />
+      );
+    case 'Devotionals':
+      return (
+        <Ionicons 
+          name={focused ? 'library' : 'library-outline'} 
           size={iconSize} 
           color={color} 
         />
@@ -106,6 +118,11 @@ const MainTabs: React.FC = () => {
         options={{ tabBarLabel: 'Prayers' }}
       />
       <Tab.Screen 
+        name="Bible" 
+        component={BibleScreen}
+        options={{ tabBarLabel: 'Bible' }}
+      />
+      <Tab.Screen 
         name="Devotionals" 
         component={DevotionalsScreen}
         options={{ tabBarLabel: 'Devotionals' }}
@@ -127,6 +144,13 @@ export const MainNavigator: React.FC = () => {
       }}
     >
       <Stack.Screen name="MainTabs" component={MainTabs} />
+      <Stack.Screen 
+        name="ChapterView" 
+        component={ChapterViewScreen}
+        options={{
+          presentation: 'card',
+        }}
+      />
       <Stack.Screen 
         name="Settings" 
         component={SettingsScreen}

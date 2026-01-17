@@ -7,7 +7,6 @@ import { AuthProvider } from './src/context/AuthContext';
 import { ThemeProvider, useTheme } from './src/theme/ThemeContext';
 import { RootNavigator } from './src/navigation/RootNavigator';
 import { NotificationProvider } from './src/context/NotificationContext';
-import { CelebrationProvider } from './src/context/CelebrationContext';
 
 // Keep the splash screen visible while we load fonts
 SplashScreen.preventAutoHideAsync();
@@ -47,9 +46,7 @@ export default function App() {
       <AuthProvider>
         <ThemeProvider>
           <NotificationProvider>
-            <CelebrationProvider>
-              <AppContent />
-            </CelebrationProvider>
+            <AppContent />
           </NotificationProvider>
         </ThemeProvider>
       </AuthProvider>

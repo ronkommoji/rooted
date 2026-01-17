@@ -15,7 +15,6 @@ import { format, parseISO } from 'date-fns';
 import { useTheme } from '../../theme/ThemeContext';
 import { Card, Avatar, Header, ChallengeCard, ChallengeDetailModal } from '../../components';
 import { useAppStore } from '../../store/useAppStore';
-import { useCelebration } from '../../context/CelebrationContext';
 import { supabase } from '../../lib/supabase';
 import { Prayer, Event, Profile } from '../../types/database';
 import { getCurrentWeekChallenge, WeeklyChallenge } from '../../data/weeklyChallenge';
@@ -29,7 +28,6 @@ export const HomeScreen: React.FC = () => {
   const { colors, isDark } = useTheme();
   const navigation = useNavigation<any>();
   const { currentGroup, session } = useAppStore();
-  const { checkPendingCelebrations } = useCelebration();
   
   const [refreshing, setRefreshing] = useState(false);
   const [weeklyChallenge, setWeeklyChallenge] = useState<WeeklyChallenge>(getCurrentWeekChallenge());
@@ -143,12 +141,6 @@ export const HomeScreen: React.FC = () => {
         return;
       }
       await addDevotional(imageUrl);
-      
-      // Check for celebrations (e.g., all devotionals complete)
-      setTimeout(() => {
-        checkPendingCelebrations();
-      }, 500);
-      
       setShowAddDevotional(false);
     } catch (error: any) {
       Alert.alert('Error', error.message || 'Failed to add devotional');

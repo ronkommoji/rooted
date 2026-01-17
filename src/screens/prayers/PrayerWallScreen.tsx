@@ -20,7 +20,6 @@ import { supabase } from '../../lib/supabase';
 import { Prayer, Profile } from '../../types/database';
 import { useNotifications } from '../../hooks/useNotifications';
 import { sendPushNotification } from '../../lib/notifications';
-import { useCelebration } from '../../context/CelebrationContext';
 
 type PrayerWithDetails = Prayer & { 
   profiles: Profile;
@@ -32,7 +31,6 @@ export const PrayerWallScreen: React.FC = () => {
   const { colors, isDark } = useTheme();
   const { currentGroup, profile, session } = useAppStore();
   const { sendPrayerNotification } = useNotifications();
-  const { showFireworks } = useCelebration();
   
   const [filter, setFilter] = useState<'Requests' | 'Answered'>('Requests');
   const [prayers, setPrayers] = useState<PrayerWithDetails[]>([]);
@@ -212,47 +210,47 @@ export const PrayerWallScreen: React.FC = () => {
               .eq('id', prayer.id);
 
             if (!error && currentGroup?.id) {
-              // Create celebration records for all group members
-              const { createPrayerAnsweredCelebration } = await import('../../services/celebrationService');
-              await createPrayerAnsweredCelebration(currentGroup.id, prayer.id);
-
-              // Show fireworks immediately for current user
-              showFireworks();
-              
-              // Send push notification to ALL group members for answered prayer
+              // Send push notification to OTHER group members (not the person who marked it as answered)
               const { data: groupMembers } = await supabase
                 .from('group_members')
                 .select('user_id')
                 .eq('group_id', currentGroup.id);
 
               if (groupMembers) {
-                // Get preferences for all members
-                const userIds = groupMembers.map(m => m.user_id);
-                const { data: preferences } = await supabase
-                  .from('user_preferences')
-                  .select('user_id, prayer_notifications')
-                  .in('user_id', userIds);
+                // Filter out the current user who marked the prayer as answered
+                const otherMembers = groupMembers.filter(
+                  member => member.user_id !== session?.user?.id
+                );
 
-                // Send push notification to each member with prayer_notifications enabled
-                const notifications = groupMembers
-                  .filter(member => {
-                    // Check if user has prayer_notifications enabled (default to true if not set)
-                    const userPrefs = preferences?.find(p => p.user_id === member.user_id);
-                    return userPrefs?.prayer_notifications !== false;
-                  })
-                  .map(member =>
-                    sendPushNotification(
-                      member.user_id,
-                      '🙏 Prayer Answered!',
-                      `"${prayer.title}" has been marked as answered. Praise God!`,
-                      {
-                        type: 'prayer',
-                        id: prayer.id,
-                      }
-                    )
-                  );
+                if (otherMembers.length > 0) {
+                  // Get preferences for other members only
+                  const userIds = otherMembers.map(m => m.user_id);
+                  const { data: preferences } = await supabase
+                    .from('user_preferences')
+                    .select('user_id, prayer_notifications')
+                    .in('user_id', userIds);
 
-                await Promise.all(notifications);
+                  // Send push notification to each member with prayer_notifications enabled
+                  const notifications = otherMembers
+                    .filter(member => {
+                      // Check if user has prayer_notifications enabled (default to true if not set)
+                      const userPrefs = preferences?.find(p => p.user_id === member.user_id);
+                      return userPrefs?.prayer_notifications !== false;
+                    })
+                    .map(member =>
+                      sendPushNotification(
+                        member.user_id,
+                        '🙏 Prayer Answered!',
+                        `"${prayer.title}" has been marked as answered. Praise God!`,
+                        {
+                          type: 'prayer',
+                          id: prayer.id,
+                        }
+                      )
+                    );
+
+                  await Promise.all(notifications);
+                }
               }
               fetchPrayers();
             }

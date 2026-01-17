@@ -15,7 +15,6 @@ import { startOfWeek } from 'date-fns';
 import { useTheme } from '../../theme/ThemeContext';
 import { Card, Header } from '../../components';
 import { useAppStore } from '../../store/useAppStore';
-import { useCelebration } from '../../context/CelebrationContext';
 import {
   WeekDayPicker,
   DailySummary,
@@ -29,7 +28,6 @@ import { useDevotionals } from './hooks';
 export const DevotionalsScreen: React.FC = () => {
   const { colors, isDark } = useTheme();
   const { session } = useAppStore();
-  const { checkPendingCelebrations } = useCelebration();
 
   // State
   const [weekStart, setWeekStart] = useState(() =>
@@ -80,11 +78,6 @@ export const DevotionalsScreen: React.FC = () => {
 
       // Create devotional with the uploaded image URL
       await addDevotional(publicUrl);
-      
-      // Check for celebrations (e.g., all devotionals complete)
-      setTimeout(() => {
-        checkPendingCelebrations();
-      }, 500);
       
       // Only close modal after successful upload and creation
       setShowAddSheet(false);
