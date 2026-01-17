@@ -111,7 +111,7 @@ export const ChapterViewScreen: React.FC = () => {
           <Text style={[styles.verseNumber, { color: isDark ? '#3D5A50' : colors.primary }]}>
             {verse.verse}
           </Text>
-          <Text style={[styles.verseText, { color: colors.text }]}>{verseText}</Text>
+          <Text style={[styles.verseText, { color: colors.text, fontWeight: 'bold' }]}>{verseText}</Text>
         </View>
       </TouchableOpacity>
     );

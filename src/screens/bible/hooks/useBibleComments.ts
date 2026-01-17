@@ -28,17 +28,94 @@ export const getBookCommentCount = async (
   groupId: string
 ): Promise<number> => {
   try {
+    if (!groupId || !book) {
+      return 0;
+    }
+
     const { count, error } = await supabase
       .from('bible_comments')
       .select('*', { count: 'exact', head: true })
       .eq('group_id', groupId)
       .eq('book', book);
 
-    if (error) throw error;
+    if (error) {
+      console.error('Error getting book comment count:', {
+        error,
+        book,
+        groupId,
+        errorMessage: error.message,
+        errorDetails: error.details,
+        errorHint: error.hint,
+        errorCode: error.code,
+      });
+      return 0; // Return 0 instead of throwing to prevent breaking the UI
+    }
     return count || 0;
-  } catch (error) {
-    console.error('Error getting book comment count:', error);
+  } catch (error: any) {
+    console.error('Error getting book comment count (catch):', {
+      error,
+      book,
+      groupId,
+      errorMessage: error?.message,
+      errorString: String(error),
+    });
     return 0;
+  }
+};
+
+/**
+ * Get comment counts for multiple books in a single optimized query
+ * This is much faster than making individual queries for each book
+ */
+export const getBookCommentCounts = async (
+  books: string[],
+  groupId: string
+): Promise<Record<string, number>> => {
+  try {
+    if (!groupId || books.length === 0) {
+      return {};
+    }
+
+    // Fetch all comments for the group and filter by books
+    const { data, error } = await supabase
+      .from('bible_comments')
+      .select('book')
+      .eq('group_id', groupId)
+      .in('book', books);
+
+    if (error) {
+      console.error('Error getting book comment counts:', {
+        error,
+        books,
+        groupId,
+        errorMessage: error.message,
+      });
+      return {};
+    }
+
+    // Count comments per book
+    const countsMap: Record<string, number> = {};
+    books.forEach((book) => {
+      countsMap[book] = 0;
+    });
+
+    if (data) {
+      data.forEach((comment) => {
+        if (comment.book && countsMap[comment.book] !== undefined) {
+          countsMap[comment.book] = (countsMap[comment.book] || 0) + 1;
+        }
+      });
+    }
+
+    return countsMap;
+  } catch (error: any) {
+    console.error('Error getting book comment counts (catch):', {
+      error,
+      books,
+      groupId,
+      errorMessage: error?.message,
+    });
+    return {};
   }
 };
 
@@ -51,6 +128,10 @@ export const getChapterCommentCount = async (
   groupId: string
 ): Promise<number> => {
   try {
+    if (!groupId || !book || !chapter) {
+      return 0;
+    }
+
     const { count, error } = await supabase
       .from('bible_comments')
       .select('*', { count: 'exact', head: true })
@@ -58,11 +139,60 @@ export const getChapterCommentCount = async (
       .eq('book', book)
       .eq('chapter', chapter);
 
-    if (error) throw error;
+    if (error) {
+      console.error('Error getting chapter comment count:', error);
+      return 0;
+    }
     return count || 0;
   } catch (error) {
     console.error('Error getting chapter comment count:', error);
     return 0;
+  }
+};
+
+/**
+ * Get comment counts for all chapters in a book in a single optimized query
+ */
+export const getChapterCommentCounts = async (
+  book: string,
+  chapterCount: number,
+  groupId: string
+): Promise<Record<number, number>> => {
+  try {
+    if (!groupId || !book || chapterCount === 0) {
+      return {};
+    }
+
+    // Fetch all comments for the book and group
+    const { data, error } = await supabase
+      .from('bible_comments')
+      .select('chapter')
+      .eq('group_id', groupId)
+      .eq('book', book);
+
+    if (error) {
+      console.error('Error getting chapter comment counts:', error);
+      return {};
+    }
+
+    // Count comments per chapter
+    const countsMap: Record<number, number> = {};
+    for (let i = 1; i <= chapterCount; i++) {
+      countsMap[i] = 0;
+    }
+
+    if (data) {
+      data.forEach((comment) => {
+        if (comment.chapter && countsMap[comment.chapter] !== undefined) {
+          countsMap[comment.chapter] = (countsMap[comment.chapter] || 0) + 1;
+        }
+      });
+    }
+
+    return countsMap;
+  } catch (error: any) {
+    console.error('Error getting chapter comment counts (catch):', error);
+    return {};
   }
 };
 
@@ -224,32 +354,37 @@ export const useBookCommentCounts = (
   const [counts, setCounts] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
+  const fetchCounts = useCallback(async () => {
     if (!groupId || books.length === 0) {
       setCounts({});
       setLoading(false);
       return;
     }
 
-    const fetchCounts = async () => {
-      setLoading(true);
-      const countsMap: Record<string, number> = {};
+    setLoading(true);
 
-      await Promise.all(
-        books.map(async (book) => {
-          const count = await getBookCommentCount(book, groupId);
-          countsMap[book] = count;
-        })
-      );
-
+    try {
+      // Use optimized single query instead of multiple individual queries
+      const countsMap = await getBookCommentCounts(books, groupId);
       setCounts(countsMap);
+    } catch (error) {
+      console.error('Error fetching book comment counts:', error);
+      // Fallback to empty counts on error
+      const emptyCounts: Record<string, number> = {};
+      books.forEach((book) => {
+        emptyCounts[book] = 0;
+      });
+      setCounts(emptyCounts);
+    } finally {
       setLoading(false);
-    };
-
-    fetchCounts();
+    }
   }, [books, groupId]);
 
-  return { counts, loading };
+  useEffect(() => {
+    fetchCounts();
+  }, [fetchCounts]);
+
+  return { counts, loading, refetch: fetchCounts };
 };
 
 /**
@@ -263,30 +398,35 @@ export const useChapterCommentCounts = (
   const [counts, setCounts] = useState<Record<number, number>>({});
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
+  const fetchCounts = useCallback(async () => {
     if (!groupId || !book || chapterCount === 0) {
       setCounts({});
       setLoading(false);
       return;
     }
 
-    const fetchCounts = async () => {
-      setLoading(true);
-      const countsMap: Record<number, number> = {};
+    setLoading(true);
 
-      await Promise.all(
-        Array.from({ length: chapterCount }, (_, i) => i + 1).map(async (chapter) => {
-          const count = await getChapterCommentCount(book, chapter, groupId);
-          countsMap[chapter] = count;
-        })
-      );
-
+    try {
+      // Use optimized single query instead of multiple individual queries
+      const countsMap = await getChapterCommentCounts(book, chapterCount, groupId);
       setCounts(countsMap);
+    } catch (error) {
+      console.error('Error fetching chapter comment counts:', error);
+      // Fallback to empty counts on error
+      const emptyCounts: Record<number, number> = {};
+      for (let i = 1; i <= chapterCount; i++) {
+        emptyCounts[i] = 0;
+      }
+      setCounts(emptyCounts);
+    } finally {
       setLoading(false);
-    };
-
-    fetchCounts();
+    }
   }, [book, chapterCount, groupId]);
 
-  return { counts, loading };
+  useEffect(() => {
+    fetchCounts();
+  }, [fetchCounts]);
+
+  return { counts, loading, refetch: fetchCounts };
 };

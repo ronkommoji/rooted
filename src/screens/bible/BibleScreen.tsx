@@ -9,7 +9,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../theme/ThemeContext';
 import { Header, PillToggle, Input, Card, EmptyState } from '../../components';
@@ -50,7 +50,7 @@ export const BibleScreen: React.FC = () => {
     () => filteredBooks.map((book) => book.name),
     [filteredBooks]
   );
-  const { counts, loading: countsLoading } = useBookCommentCounts(
+  const { counts, loading: countsLoading, refetch: refetchBookCounts } = useBookCommentCounts(
     bookNames,
     currentGroup?.id || null
   );
@@ -72,11 +72,23 @@ export const BibleScreen: React.FC = () => {
 
   const onRefresh = async () => {
     setRefreshing(true);
-    // The comment counts will refresh automatically via the hook
-    setTimeout(() => {
-      setRefreshing(false);
-    }, 500);
+    // Refetch comment counts when user pulls to refresh
+    await refetchBookCounts();
+    setRefreshing(false);
   };
+
+  // Refresh comment counts when screen comes into focus
+  // This ensures counts are updated when navigating back from ChapterViewScreen
+  useFocusEffect(
+    React.useCallback(() => {
+      if (currentGroup?.id && bookNames.length > 0) {
+        // Small delay to ensure smooth transition
+        setTimeout(() => {
+          refetchBookCounts();
+        }, 100);
+      }
+    }, [currentGroup?.id, bookNames.length])
+  );
 
   const selectedBookData = selectedBook
     ? bibleBooks.find((b) => b.name === selectedBook)
