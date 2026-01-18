@@ -187,7 +187,8 @@ const styles = StyleSheet.create({
   },
   text: {
     fontSize: 32,
-    fontWeight: 'bold',
+    fontWeight: '700',
+    fontFamily: 'PlayfairDisplay_700Bold', // Match app title font
     color: '#3D5A50',
     letterSpacing: 2,
   },
