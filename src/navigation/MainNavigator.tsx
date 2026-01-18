@@ -11,6 +11,9 @@ import { DevotionalsScreen } from '../screens/devotionals/DevotionalsScreen';
 import { EventsScreen } from '../screens/events/EventsScreen';
 import { SettingsScreen } from '../screens/settings/SettingsScreen';
 import { ChapterViewScreen } from '../screens/bible/ChapterViewScreen';
+import { ScriptureDetailScreen } from '../screens/devotionals/scripture/ScriptureDetailScreen';
+import { DevotionalDetailScreen } from '../screens/devotionals/devotional/DevotionalDetailScreen';
+import { PrayerDetailScreen } from '../screens/devotionals/prayer/PrayerDetailScreen';
 
 export type MainTabParamList = {
   Home: undefined;
@@ -24,6 +27,9 @@ export type MainStackParamList = {
   MainTabs: undefined;
   Settings: undefined;
   ChapterView: { book: string; chapter: number };
+  ScriptureDetail: undefined;
+  DevotionalDetail: undefined;
+  PrayerDetail: undefined;
 };
 
 const Tab = createBottomTabNavigator<MainTabParamList>();
@@ -156,6 +162,27 @@ export const MainNavigator: React.FC = () => {
         component={SettingsScreen}
         options={{
           presentation: 'modal',
+        }}
+      />
+      <Stack.Screen 
+        name="ScriptureDetail" 
+        component={ScriptureDetailScreen}
+        options={{
+          presentation: 'card',
+        }}
+      />
+      <Stack.Screen 
+        name="DevotionalDetail" 
+        component={DevotionalDetailScreen}
+        options={{
+          presentation: 'card',
+        }}
+      />
+      <Stack.Screen 
+        name="PrayerDetail" 
+        component={PrayerDetailScreen}
+        options={{
+          presentation: 'card',
         }}
       />
     </Stack.Navigator>

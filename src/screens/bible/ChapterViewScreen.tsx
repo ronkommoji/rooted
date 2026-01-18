@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -28,6 +28,10 @@ type ChapterViewRouteProp = RouteProp<
   'ChapterView'
 >;
 
+// Cache duration: 10 minutes for chapter data, 2 minutes for comments
+const CHAPTER_CACHE_DURATION_MS = 10 * 60 * 1000;
+const COMMENTS_CACHE_DURATION_MS = 2 * 60 * 1000;
+
 export const ChapterViewScreen: React.FC = () => {
   const { colors, isDark } = useTheme();
   const navigation = useNavigation();
@@ -42,12 +46,31 @@ export const ChapterViewScreen: React.FC = () => {
   const [selectedVerse, setSelectedVerse] = useState<number | null>(null);
   const [showCommentsModal, setShowCommentsModal] = useState(false);
 
-  const fetchChapterData = useCallback(async () => {
+  // Cache tracking
+  const chapterCache = useRef<Record<string, { data: BibleChapter; timestamp: number }>>({});
+  const commentsCache = useRef<Record<string, { data: Set<number>; timestamp: number }>>({});
+
+  const getCacheKey = (b: string, c: number) => `${b}-${c}`;
+
+  const fetchChapterData = useCallback(async (forceRefresh = false) => {
+    const cacheKey = getCacheKey(book, chapter);
+    const now = Date.now();
+    const cached = chapterCache.current[cacheKey];
+
+    // Use cache if available and not stale
+    if (!forceRefresh && cached && (now - cached.timestamp) < CHAPTER_CACHE_DURATION_MS) {
+      setChapterData(cached.data);
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
     try {
       const data = await fetchChapter(book, chapter);
       if (data) {
         setChapterData(data);
+        // Cache the data
+        chapterCache.current[cacheKey] = { data, timestamp: now };
       } else {
         Alert.alert('Error', 'Failed to load chapter. Please try again.');
       }
@@ -59,12 +82,24 @@ export const ChapterViewScreen: React.FC = () => {
     }
   }, [book, chapter]);
 
-  const fetchVersesWithComments = useCallback(async () => {
+  const fetchVersesWithComments = useCallback(async (forceRefresh = false) => {
     if (!currentGroup?.id) return;
+
+    const cacheKey = `${getCacheKey(book, chapter)}-${currentGroup.id}`;
+    const now = Date.now();
+    const cached = commentsCache.current[cacheKey];
+
+    // Use cache if available and not stale
+    if (!forceRefresh && cached && (now - cached.timestamp) < COMMENTS_CACHE_DURATION_MS) {
+      setVersesWithComments(cached.data);
+      return;
+    }
 
     try {
       const verses = await getVersesWithComments(book, chapter, currentGroup.id);
       setVersesWithComments(verses);
+      // Cache the data
+      commentsCache.current[cacheKey] = { data: verses, timestamp: now };
     } catch (error) {
       console.error('Error fetching verses with comments:', error);
     }
@@ -81,8 +116,8 @@ export const ChapterViewScreen: React.FC = () => {
   };
 
   const handleCommentAdded = () => {
-    // Refresh verses with comments after a comment is added
-    fetchVersesWithComments();
+    // Refresh verses with comments after a comment is added (force refresh)
+    fetchVersesWithComments(true);
   };
 
   const selectedVerseText =

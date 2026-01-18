@@ -635,6 +635,57 @@ export type Database = {
           },
         ]
       }
+      daily_devotional_completions: {
+        Row: {
+          id: string
+          user_id: string
+          group_id: string
+          date: string
+          scripture_completed: boolean | null
+          devotional_completed: boolean | null
+          prayer_completed: boolean | null
+          created_at: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          group_id: string
+          date: string
+          scripture_completed?: boolean | null
+          devotional_completed?: boolean | null
+          prayer_completed?: boolean | null
+          created_at?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          group_id?: string
+          date?: string
+          scripture_completed?: boolean | null
+          devotional_completed?: boolean | null
+          prayer_completed?: boolean | null
+          created_at?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "daily_devotional_completions_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "daily_devotional_completions_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "groups"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
@@ -679,6 +730,7 @@ export type EventPollVote = Tables<'event_poll_votes'>;
 export type EventRsvp = Tables<'event_rsvps'>;
 export type UserPreferences = Tables<'user_preferences'>;
 export type Challenge = Tables<'challenges'>;
+export type DailyDevotionalCompletion = Tables<'daily_devotional_completions'>;
 
 // Extended types with relations
 export type PrayerWithAuthor = Prayer & {

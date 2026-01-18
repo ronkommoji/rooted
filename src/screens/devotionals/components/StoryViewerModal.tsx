@@ -13,6 +13,7 @@ import {
   StatusBar,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { MemberSubmission } from './StoryRow';
 
@@ -32,8 +33,10 @@ export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({
   initialMemberId,
   onClose,
 }) => {
-  // Filter to only posted stories
-  const postedStories = stories.filter((s) => s.hasPosted && s.imageUrl);
+  const navigation = useNavigation<any>();
+  
+  // Filter to only posted stories (with images OR daily devotional completions)
+  const postedStories = stories.filter((s) => s.hasPosted && (s.imageUrl || s.isDailyDevotional));
 
   const initialIndex = postedStories.findIndex(
     (s) => s.memberId === initialMemberId
@@ -275,7 +278,7 @@ export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({
           </View>
         </SafeAreaView>
 
-        {/* Image */}
+        {/* Image or Text Story */}
         <Pressable
           style={styles.imageContainer}
           onPress={handleScreenPress}
@@ -283,11 +286,47 @@ export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({
           onPressOut={handlePauseEnd}
           delayLongPress={150}
         >
-          <Image
-            source={{ uri: currentStory.imageUrl || '' }}
-            style={styles.image}
-            resizeMode="contain"
-          />
+          {currentStory.imageUrl ? (
+            <Image
+              source={{ uri: currentStory.imageUrl }}
+              style={styles.image}
+              resizeMode="contain"
+            />
+          ) : currentStory.isDailyDevotional ? (
+            <View style={styles.textStoryContainer}>
+              {/* Background image from daily devotional API */}
+              {currentStory.dailyDevotionalImageUrl && (
+                <Image
+                  source={{ uri: currentStory.dailyDevotionalImageUrl }}
+                  style={styles.backgroundImage}
+                  resizeMode="cover"
+                />
+              )}
+              {/* Overlay for better text readability */}
+              <View style={styles.overlay} />
+              {/* Content */}
+              <View style={styles.textStoryContent}>
+                <Ionicons name="checkmark-circle" size={64} color="#4CAF50" />
+                <Text style={styles.textStoryTitle}>Completed in app devotional</Text>
+                {currentStory.dailyDevotionalComment && (
+                  <View style={styles.commentContainer}>
+                    <Text style={styles.commentLabel}>Your comment:</Text>
+                    <Text style={styles.commentText}>{currentStory.dailyDevotionalComment}</Text>
+                    <TouchableOpacity
+                      style={styles.viewDevotionalButton}
+                      onPress={() => {
+                        onClose();
+                        // Navigate to devotional detail screen
+                        navigation.navigate('DevotionalDetail');
+                      }}
+                    >
+                      <Text style={styles.viewDevotionalText}>View Devotional →</Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
+              </View>
+            </View>
+          ) : null}
           {/* Optional: Visual indicator when paused */}
           {isPaused && (
             <View style={styles.pauseIndicator}>
@@ -367,7 +406,9 @@ const styles = StyleSheet.create({
   },
   imageContainer: {
     flex: 1,
-    justifyContent: 'center',
+    width: SCREEN_WIDTH,
+    height: SCREEN_HEIGHT,
+    position: 'relative',
   },
   image: {
     width: SCREEN_WIDTH,
@@ -382,6 +423,78 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: 'rgba(0,0,0,0.2)',
+  },
+  textStoryContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    width: SCREEN_WIDTH,
+    height: SCREEN_HEIGHT,
+    position: 'relative',
+    backgroundColor: 'rgba(61, 90, 80, 0.1)',
+  },
+  backgroundImage: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    width: SCREEN_WIDTH,
+    height: SCREEN_HEIGHT,
+  },
+  overlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    width: SCREEN_WIDTH,
+    height: SCREEN_HEIGHT,
+    backgroundColor: 'rgba(0, 0, 0, 0.4)', // Dark overlay for better text readability
+  },
+  textStoryContent: {
+    alignItems: 'center',
+    maxWidth: 300,
+    zIndex: 1, // Ensure content is above background and overlay
+    paddingHorizontal: 40,
+  },
+  textStoryTitle: {
+    color: '#FFFFFF',
+    fontSize: 24,
+    fontWeight: '700',
+    textAlign: 'center',
+    marginTop: 24,
+    marginBottom: 32,
+  },
+  commentContainer: {
+    width: '100%',
+    marginTop: 24,
+    padding: 20,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)', // Darker background for better readability over image
+    borderRadius: 12,
+    zIndex: 1,
+  },
+  commentLabel: {
+    color: 'rgba(255,255,255,0.7)',
+    fontSize: 12,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+    marginBottom: 8,
+  },
+  commentText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    lineHeight: 24,
+    marginBottom: 16,
+  },
+  viewDevotionalButton: {
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 8,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    alignSelf: 'flex-start',
+  },
+  viewDevotionalText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '600',
   },
 });
 

@@ -20,6 +20,7 @@ interface AppState {
   currentGroup: Group | null;
   groupMembers: GroupMemberWithProfile[];
   currentUserRole: 'admin' | 'member' | null;
+  isGroupChecked: boolean; // Track if we've completed checking for a group
   
   // Preferences
   preferences: UserPreferences | null;
@@ -31,6 +32,7 @@ interface AppState {
   setGroupMembers: (members: GroupMemberWithProfile[]) => void;
   setPreferences: (preferences: UserPreferences | null) => void;
   setLoading: (loading: boolean) => void;
+  setGroupChecked: (checked: boolean) => void;
   
   // Async actions
   fetchProfile: () => Promise<void>;
@@ -56,14 +58,25 @@ export const useAppStore = create<AppState>((set, get) => ({
   currentGroup: null,
   groupMembers: [],
   currentUserRole: null,
+  isGroupChecked: false,
   preferences: null,
 
-  setSession: (session) => set({ session }),
+  setSession: (session) => {
+    // When session becomes null, mark group as checked (no group to check for)
+    // When session is set, fetchCurrentGroup will be called and set isGroupChecked appropriately
+    if (!session) {
+      set({ session, isGroupChecked: true, currentGroup: null, currentUserRole: null });
+    } else {
+      // When setting a new session, reset isGroupChecked so we wait for fetchCurrentGroup
+      set({ session, isGroupChecked: false });
+    }
+  },
   setProfile: (profile) => set({ profile }),
   setCurrentGroup: (group) => set({ currentGroup: group }),
   setGroupMembers: (members) => set({ groupMembers: members }),
   setPreferences: (preferences) => set({ preferences }),
   setLoading: (loading) => set({ isLoading: loading }),
+  setGroupChecked: (checked) => set({ isGroupChecked: checked }),
 
   fetchProfile: async () => {
     const { session } = get();
@@ -97,7 +110,11 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   fetchCurrentGroup: async () => {
     const { session } = get();
-    if (!session?.user?.id) return;
+    if (!session?.user?.id) {
+      // No session, mark as checked so we don't wait
+      set({ isGroupChecked: true, currentGroup: null, currentUserRole: null });
+      return;
+    }
 
     try {
       // Get the user's first group membership with role
@@ -114,7 +131,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 
       if (memberError || !membership) {
         // User has no group - this is valid, not an error
-        set({ currentGroup: null, currentUserRole: null });
+        set({ currentGroup: null, currentUserRole: null, isGroupChecked: true });
         return;
       }
 
@@ -130,20 +147,23 @@ export const useAppStore = create<AppState>((set, get) => ({
 
       if (error) {
         console.warn('Error fetching group:', error.message);
-        set({ currentGroup: null, currentUserRole: null });
+        set({ currentGroup: null, currentUserRole: null, isGroupChecked: true });
         return;
       }
 
       if (group) {
         set({ 
           currentGroup: group,
-          currentUserRole: membership.role as 'admin' | 'member' | null
+          currentUserRole: membership.role as 'admin' | 'member' | null,
+          isGroupChecked: true
         });
+      } else {
+        set({ isGroupChecked: true });
       }
     } catch (error) {
       console.error('Error fetching current group:', error);
       // Set to null to allow app to continue (user will see onboarding)
-      set({ currentGroup: null, currentUserRole: null });
+      set({ currentGroup: null, currentUserRole: null, isGroupChecked: true });
     }
   },
 
@@ -218,6 +238,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       currentGroup: null, 
       groupMembers: [],
       currentUserRole: null,
+      isGroupChecked: false,
       preferences: null 
     });
   },
@@ -271,7 +292,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         week_end: weekEnd.toISOString().split('T')[0],
       });
 
-    set({ currentGroup: group });
+    set({ currentGroup: group, isGroupChecked: true });
     return group;
   },
 
@@ -306,7 +327,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         .single();
       
       if (fullGroup) {
-        set({ currentGroup: fullGroup });
+        set({ currentGroup: fullGroup, isGroupChecked: true });
         return fullGroup;
       }
       throw new Error('Failed to fetch group');
@@ -336,7 +357,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       throw new Error('Failed to fetch group');
     }
 
-    set({ currentGroup: fullGroup });
+    set({ currentGroup: fullGroup, isGroupChecked: true });
     return fullGroup;
   },
 
@@ -384,7 +405,8 @@ export const useAppStore = create<AppState>((set, get) => ({
     set({ 
       currentGroup: null,
       groupMembers: [],
-      currentUserRole: null
+      currentUserRole: null,
+      isGroupChecked: true // Mark as checked so onboarding shows immediately
     });
   },
 }));
