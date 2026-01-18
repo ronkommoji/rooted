@@ -12,7 +12,7 @@ import {
   Dimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { FlashList } from '@shopify/flash-list';
+import { FlashList, FlashListRef } from '@shopify/flash-list';
 import { Ionicons } from '@expo/vector-icons';
 import { PIConfetti, PIConfettiMethods } from 'react-native-fast-confetti';
 import { useTheme } from '../../theme/ThemeContext';
@@ -38,6 +38,9 @@ export const PrayerWallScreen: React.FC = () => {
   
   // Refs to measure prayer card positions
   const prayerCardRefs = useRef<{ [key: string]: View | null }>({});
+  
+  // Ref for FlashList to enable scrolling
+  const listRef = useRef<FlashListRef<PrayerWithDetails>>(null);
   
   const [filter, setFilter] = useState<'Requests' | 'Answered'>('Requests');
   const [prayers, setPrayers] = useState<PrayerWithDetails[]>([]);
@@ -332,7 +335,11 @@ export const PrayerWallScreen: React.FC = () => {
       setShowCreateModal(false);
       setNewPrayerTitle('');
       setNewPrayerContent('');
-      fetchPrayers();
+      await fetchPrayers();
+      // Scroll to top after adding new prayer
+      setTimeout(() => {
+        listRef.current?.scrollToIndex({ index: 0, animated: true });
+      }, 200);
     } catch (error: any) {
       Alert.alert('Error', error.message || 'Failed to create prayer request');
     } finally {
@@ -411,7 +418,11 @@ export const PrayerWallScreen: React.FC = () => {
 
               if (error) throw error;
 
-              fetchPrayers();
+              await fetchPrayers();
+              // Scroll to top after deleting prayer
+              setTimeout(() => {
+                listRef.current?.scrollToIndex({ index: 0, animated: true });
+      }, 200);
             } catch (error: any) {
               Alert.alert('Error', error.message || 'Failed to delete prayer');
             }
@@ -494,9 +505,11 @@ export const PrayerWallScreen: React.FC = () => {
       </View>
 
       <FlashList
+        ref={listRef}
         data={prayers}
         keyExtractor={(item) => item.id}
         renderItem={renderPrayerCard}
+        // @ts-expect-error - estimatedItemSize is valid but TypeScript definitions may be outdated
         estimatedItemSize={200}
         contentContainerStyle={styles.list}
         refreshControl={
