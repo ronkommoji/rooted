@@ -24,7 +24,7 @@ import {
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { Card } from '../Card';
 import { Avatar } from '../Avatar';
-import { useTheme } from '../../context/ThemeContext';
+import { useTheme } from '../../theme/ThemeContext';
 import { timeAgo } from '../../lib/dateUtils';
 
 export interface PrayerWithDetails {

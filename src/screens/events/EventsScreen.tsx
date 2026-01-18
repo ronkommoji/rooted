@@ -1,9 +1,8 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { 
-  View, 
-  Text, 
-  StyleSheet, 
-  FlatList, 
+import {
+  View,
+  Text,
+  StyleSheet,
   RefreshControl,
   TouchableOpacity,
   Alert,
@@ -13,9 +12,11 @@ import {
   ScrollView
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { FlashList } from '@shopify/flash-list';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../theme/ThemeContext';
-import { Card, Header, PillToggle, Button, Input, EmptyState, Avatar } from '../../components';
+import { Header, PillToggle, Button, Input, EmptyState } from '../../components';
+import { EventCard, EventWithRsvps, Attendee } from './components/EventCard';
 import { useAppStore } from '../../store/useAppStore';
 import { supabase } from '../../lib/supabase';
 import { Event } from '../../types/database';
@@ -23,17 +24,6 @@ import { format, parseISO } from 'date-fns';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { useNotifications } from '../../hooks/useNotifications';
 import { sendPushNotification } from '../../lib/notifications';
-
-type EventWithRsvps = Event & {
-  rsvp_counts: { yes: number; no: number };
-  user_rsvp: 'yes' | 'no' | null;
-};
-
-type Attendee = {
-  user_id: string;
-  full_name: string;
-  avatar_url: string | null;
-};
 
 export const EventsScreen: React.FC = () => {
   const { colors, isDark } = useTheme();
@@ -549,173 +539,21 @@ export const EventsScreen: React.FC = () => {
   };
 
   const renderEventCard = ({ item: event }: { item: EventWithRsvps }) => {
-    const isUserGoing = event.user_rsvp === 'yes';
-    const isUserNotGoing = event.user_rsvp === 'no';
     const isOwnEvent = event.created_by === session?.user?.id;
-    // Show menu for all group members (anyone can edit, but only creator can delete)
-    // Since events are already filtered by currentGroup.id, if we're viewing events, we're in a group
     const canEditEvent = !!currentGroup && !!session && !!event.group_id;
-    
+
     return (
-      <Card style={styles.eventCard}>
-        <View style={styles.eventHeader}>
-          <Text style={[styles.eventTitle, { color: colors.text }]}>
-            {event.title}
-          </Text>
-          {canEditEvent && (
-            <TouchableOpacity
-              onPress={() => handleOpenMenu(event)}
-              style={styles.menuButton}
-              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-            >
-              <Ionicons name="ellipsis-horizontal" size={20} color={colors.textMuted} />
-            </TouchableOpacity>
-          )}
-        </View>
-        
-        <View style={styles.eventDetails}>
-          <View style={styles.eventDetailRow}>
-            <Ionicons name="calendar-outline" size={16} color={colors.textSecondary} />
-            <Text style={[styles.eventDetailText, { color: colors.textSecondary }]}>
-              {event.event_date ? format(parseISO(event.event_date), 'EEEE, MMM d, yyyy') : 'TBD'}
-            </Text>
-          </View>
-          
-          <View style={styles.eventDetailRow}>
-            <Ionicons name="time-outline" size={16} color={colors.textSecondary} />
-            <Text style={[styles.eventDetailText, { color: colors.textSecondary }]}>
-              {event.event_date ? format(parseISO(event.event_date), 'h:mm a') : 'TBD'}
-            </Text>
-          </View>
-          
-          {event.location && (
-            <View style={styles.eventDetailRow}>
-              <Ionicons name="location-outline" size={16} color={colors.textSecondary} />
-              <Text style={[styles.eventDetailText, { color: colors.textSecondary }]}>
-                {event.location}
-              </Text>
-            </View>
-          )}
-
-          {event.address && (
-            <View style={styles.eventDetailRow}>
-              <Ionicons name="navigate-outline" size={16} color={colors.textMuted} />
-              <Text style={[styles.eventDetailText, { color: colors.textMuted }]}>
-                {event.address}
-              </Text>
-            </View>
-          )}
-        </View>
-
-        {event.description && (
-          <Text style={[styles.eventNotes, { color: colors.textSecondary }]}>
-            {event.description}
-          </Text>
-        )}
-
-        {/* Attendance Summary */}
-        <View style={[styles.attendanceSummary, { borderTopColor: colors.cardBorder }]}>
-          <TouchableOpacity
-            style={styles.attendanceCount}
-            onPress={() => event.rsvp_counts.yes > 0 && toggleAttendeeList(event.id)}
-            disabled={event.rsvp_counts.yes === 0}
-            activeOpacity={event.rsvp_counts.yes > 0 ? 0.7 : 1}
-          >
-            <Ionicons name="people-outline" size={16} color={colors.textSecondary} />
-            <Text style={[styles.attendanceText, { color: colors.textSecondary }]}>
-              {event.rsvp_counts.yes} going
-            </Text>
-            {event.rsvp_counts.yes > 0 && (
-              <Ionicons
-                name={expandedEventId === event.id ? "chevron-up" : "chevron-down"}
-                size={16}
-                color={colors.textSecondary}
-                style={styles.chevronIcon}
-              />
-            )}
-          </TouchableOpacity>
-        </View>
-
-        {/* Expanded Attendee List */}
-        {expandedEventId === event.id && (
-          <View style={[styles.attendeeList, { borderTopColor: colors.cardBorder }]}>
-            {loadingAttendees[event.id] ? (
-              <Text style={[styles.loadingText, { color: colors.textSecondary }]}>
-                Loading...
-              </Text>
-            ) : attendees[event.id] && attendees[event.id].length > 0 ? (
-              attendees[event.id].map((attendee) => (
-                <View key={attendee.user_id} style={styles.attendeeItem}>
-                  <Avatar
-                    name={attendee.full_name}
-                    imageUrl={attendee.avatar_url}
-                    size={32}
-                  />
-                  <Text style={[styles.attendeeName, { color: colors.text }]}>
-                    {attendee.full_name}
-                  </Text>
-                </View>
-              ))
-            ) : (
-              <Text style={[styles.emptyAttendeesText, { color: colors.textSecondary }]}>
-                No attendees yet
-              </Text>
-            )}
-          </View>
-        )}
-
-        {/* RSVP Buttons */}
-        <View style={styles.rsvpContainer}>
-          <Text style={[styles.rsvpLabel, { color: colors.textMuted }]}>Are you going?</Text>
-          <View style={styles.rsvpButtons}>
-            <TouchableOpacity
-              style={[
-                styles.rsvpButton,
-                { borderColor: isDark ? '#3D5A50' : colors.primary },
-                isUserGoing && { backgroundColor: isDark ? '#3D5A50' : colors.primary },
-              ]}
-              onPress={() => handleRsvp(event, 'yes')}
-            >
-              <Ionicons 
-                name={isUserGoing ? "checkmark-circle" : "checkmark-circle-outline"} 
-                size={18} 
-                color={isUserGoing ? '#FFFFFF' : (isDark ? '#3D5A50' : colors.primary)} 
-              />
-              <Text
-                style={[
-                  styles.rsvpButtonText,
-                  { color: isUserGoing ? '#FFFFFF' : (isDark ? '#3D5A50' : colors.primary) },
-                ]}
-              >
-                Yes
-              </Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[
-                styles.rsvpButton,
-                { borderColor: colors.error },
-                isUserNotGoing && { backgroundColor: colors.error },
-              ]}
-              onPress={() => handleRsvp(event, 'no')}
-            >
-              <Ionicons 
-                name={isUserNotGoing ? "close-circle" : "close-circle-outline"} 
-                size={18} 
-                color={isUserNotGoing ? '#FFFFFF' : colors.error} 
-              />
-              <Text
-                style={[
-                  styles.rsvpButtonText,
-                  { color: isUserNotGoing ? '#FFFFFF' : colors.error },
-                ]}
-              >
-                No
-              </Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Card>
+      <EventCard
+        event={event}
+        onRsvp={handleRsvp}
+        onMenuPress={handleOpenMenu}
+        onToggleAttendees={toggleAttendeeList}
+        expandedEventId={expandedEventId}
+        attendees={attendees}
+        loadingAttendees={loadingAttendees}
+        isCurrentUserCreator={isOwnEvent}
+        canEditEvent={canEditEvent}
+      />
     );
   };
 
@@ -738,10 +576,11 @@ export const EventsScreen: React.FC = () => {
         )}
       </View>
 
-      <FlatList
+      <FlashList
         data={events}
         keyExtractor={(item) => item.id}
         renderItem={renderEventCard}
+        estimatedItemSize={300}
         contentContainerStyle={styles.list}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
@@ -1158,108 +997,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 0,
     paddingBottom: 100,
-  },
-  eventCard: {
-    marginBottom: 16,
-  },
-  eventHeader: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
-    marginBottom: 12,
-  },
-  eventTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    flex: 1,
-  },
-  menuButton: {
-    padding: 4,
-    marginLeft: 8,
-  },
-  eventDetails: {
-    gap: 8,
-  },
-  eventDetailRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  eventDetailText: {
-    fontSize: 14,
-  },
-  eventNotes: {
-    fontSize: 14,
-    lineHeight: 20,
-    marginTop: 12,
-    fontStyle: 'italic',
-  },
-  attendanceSummary: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 16,
-    paddingTop: 12,
-    borderTopWidth: 1,
-  },
-  attendanceCount: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  attendanceText: {
-    fontSize: 13,
-    fontWeight: '500',
-  },
-  chevronIcon: {
-    marginLeft: 4,
-  },
-  attendeeList: {
-    marginTop: 12,
-    paddingTop: 12,
-    borderTopWidth: 1,
-    gap: 12,
-  },
-  attendeeItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  attendeeName: {
-    fontSize: 14,
-    fontWeight: '500',
-  },
-  loadingText: {
-    fontSize: 13,
-    fontStyle: 'italic',
-  },
-  emptyAttendeesText: {
-    fontSize: 13,
-    fontStyle: 'italic',
-  },
-  rsvpContainer: {
-    marginTop: 12,
-  },
-  rsvpLabel: {
-    fontSize: 13,
-    marginBottom: 10,
-  },
-  rsvpButtons: {
-    flexDirection: 'row',
-    gap: 12,
-  },
-  rsvpButton: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 12,
-    borderRadius: 10,
-    borderWidth: 1.5,
-    gap: 6,
-  },
-  rsvpButtonText: {
-    fontSize: 15,
-    fontWeight: '600',
   },
   fab: {
     position: 'absolute',

@@ -1,9 +1,8 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
-import { 
-  View, 
-  Text, 
-  StyleSheet, 
-  FlatList, 
+import {
+  View,
+  Text,
+  StyleSheet,
   RefreshControl,
   TouchableOpacity,
   Alert,
@@ -11,24 +10,19 @@ import {
   KeyboardAvoidingView,
   Platform,
   Dimensions,
-  Animated
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { FlashList } from '@shopify/flash-list';
+import { Ionicons } from '@expo/vector-icons';
 import { PIConfetti, PIConfettiMethods } from 'react-native-fast-confetti';
 import { useTheme } from '../../theme/ThemeContext';
-import { Card, Avatar, Header, PillToggle, Button, Input, EmptyState } from '../../components';
+import { Header, PillToggle, Button, Input, EmptyState } from '../../components';
+import { PrayerCard, PrayerWithDetails } from '../../components/prayers/PrayerCard';
 import { useAppStore } from '../../store/useAppStore';
 import { supabase } from '../../lib/supabase';
 import { Prayer, Profile } from '../../types/database';
 import { useNotifications } from '../../hooks/useNotifications';
 import { sendPushNotification } from '../../lib/notifications';
-
-type PrayerWithDetails = Prayer & { 
-  profiles: Profile;
-  total_prayed: number;
-  user_prayed: boolean;
-};
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -93,7 +87,6 @@ export const PrayerWallScreen: React.FC = () => {
     const prayersWithDetails = (prayersData || []).map((prayer) => ({
       ...prayer,
       total_prayed: (prayer as any).prayer_count || 0,
-      user_prayed: false, // Not tracking individual users anymore - simplified!
     })) as PrayerWithDetails[];
 
     setPrayers(prayersWithDetails);
@@ -428,53 +421,11 @@ export const PrayerWallScreen: React.FC = () => {
     );
   };
 
-  const timeAgo = (date: string) => {
-    const now = new Date();
-    const then = new Date(date);
-    const diffMs = now.getTime() - then.getTime();
-    const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
-    const diffDays = Math.floor(diffHours / 24);
-
-    if (diffDays > 0) return `${diffDays}d ago`;
-    if (diffHours > 0) return `${diffHours}h ago`;
-    return 'Just now';
-  };
-
-  // Animation values for each prayer card
-  const prayerAnimations = useRef<{ [key: string]: Animated.Value }>({});
-
-  const getOrCreateAnimation = (prayerId: string) => {
-    if (!prayerAnimations.current[prayerId]) {
-      prayerAnimations.current[prayerId] = new Animated.Value(1);
-    }
-    return prayerAnimations.current[prayerId];
-  };
-
-  // Effect to handle card animation when animatingPrayerId changes
-  useEffect(() => {
-    if (animatingPrayerId) {
-      const scaleAnim = getOrCreateAnimation(animatingPrayerId);
-      Animated.sequence([
-        Animated.timing(scaleAnim, {
-          toValue: 1.05,
-          duration: 200,
-          useNativeDriver: true,
-        }),
-        Animated.timing(scaleAnim, {
-          toValue: 1,
-          duration: 200,
-          useNativeDriver: true,
-        }),
-      ]).start();
-    }
-  }, [animatingPrayerId]);
-
   const renderPrayerCard = ({ item: prayer }: { item: PrayerWithDetails }) => {
     const isOwnPrayer = prayer.user_id === session?.user?.id;
-    const scaleAnim = getOrCreateAnimation(prayer.id);
-    
+
     return (
-      <Animated.View
+      <View
         ref={(ref: View | null) => {
           if (ref) {
             prayerCardRefs.current[prayer.id] = ref;
@@ -483,82 +434,17 @@ export const PrayerWallScreen: React.FC = () => {
           }
         }}
         collapsable={false}
-        style={{
-          transform: [{ scale: scaleAnim }],
-        }}
       >
-        <Card style={styles.prayerCard}>
-        {prayer.is_answered && (
-          <View style={[styles.answeredBadge, { backgroundColor: colors.success }]}>
-            <Ionicons name="checkmark-circle" size={14} color="#FFFFFF" style={{ marginRight: 4 }} />
-            <Text style={styles.answeredText}>ANSWERED</Text>
-          </View>
-        )}
-        
-        <View style={styles.prayerHeader}>
-          <Avatar name={prayer.profiles.full_name} size={40} />
-          <View style={styles.prayerInfo}>
-            <Text style={[styles.prayerTitle, { color: colors.text }]}>
-              {prayer.title}
-            </Text>
-            <Text style={[styles.prayerMeta, { color: colors.textMuted }]}>
-              {prayer.profiles.full_name} · {timeAgo(prayer.created_at || new Date().toISOString())}
-            </Text>
-          </View>
-          
-          {isOwnPrayer && (
-            <TouchableOpacity
-              onPress={() => handleOpenMenu(prayer)}
-              style={styles.menuButton}
-              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-            >
-              <Ionicons name="ellipsis-horizontal" size={20} color={colors.textMuted} />
-            </TouchableOpacity>
-          )}
-        </View>
-
-        {prayer.content && (
-          <Text style={[styles.prayerContent, { color: colors.textSecondary }]}>
-            {prayer.content}
-          </Text>
-        )}
-
-        <View style={[styles.prayerFooter, { borderTopColor: colors.cardBorder }]}>
-          <View style={styles.prayedCount}>
-            <Text style={[styles.prayedText, { color: colors.textSecondary }]}>
-              {prayer.total_prayed} prayed
-            </Text>
-          </View>
-
-          <View style={styles.prayerActions}>
-            {!prayer.is_answered && isOwnPrayer && (
-              <TouchableOpacity 
-                style={[styles.actionButton, { borderColor: colors.success }]}
-                onPress={() => handleMarkAnswered(prayer)}
-              >
-                <Ionicons name="checkmark" size={16} color={colors.success} style={{ marginRight: 4 }} />
-                <Text style={{ color: colors.success, fontWeight: '500' }}>Answered</Text>
-              </TouchableOpacity>
-            )}
-            
-            {!prayer.is_answered && (
-              <TouchableOpacity 
-                style={[
-                  styles.prayButton, 
-                  { backgroundColor: isDark ? '#3D5A50' : colors.primary },
-                  processingPrayers.has(prayer.id) && { opacity: 0.6 }
-                ]}
-                onPress={() => handlePray(prayer)}
-                disabled={processingPrayers.has(prayer.id)}
-              >
-                <MaterialCommunityIcons name="hands-pray" size={16} color="#FFFFFF" style={{ marginRight: 4 }} />
-                <Text style={styles.prayButtonText}>Prayed</Text>
-              </TouchableOpacity>
-            )}
-          </View>
-        </View>
-      </Card>
-      </Animated.View>
+        <PrayerCard
+          prayer={prayer}
+          isOwnPrayer={isOwnPrayer}
+          isProcessing={processingPrayers.has(prayer.id)}
+          isAnimating={animatingPrayerId === prayer.id}
+          onPray={handlePray}
+          onMarkAnswered={handleMarkAnswered}
+          onOpenMenu={handleOpenMenu}
+        />
+      </View>
     );
   };
 
@@ -607,10 +493,11 @@ export const PrayerWallScreen: React.FC = () => {
         )}
       </View>
 
-      <FlatList
+      <FlashList
         data={prayers}
         keyExtractor={(item) => item.id}
         renderItem={renderPrayerCard}
+        estimatedItemSize={200}
         contentContainerStyle={styles.list}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
@@ -821,87 +708,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 0,
     paddingBottom: 80,
-  },
-  prayerCard: {
-    marginBottom: 16,
-  },
-  answeredBadge: {
-    alignSelf: 'flex-start',
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 6,
-    marginBottom: 12,
-  },
-  answeredText: {
-    color: '#FFFFFF',
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  prayerHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  prayerInfo: {
-    flex: 1,
-    marginLeft: 12,
-  },
-  prayerTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  prayerMeta: {
-    fontSize: 12,
-    marginTop: 2,
-  },
-  menuButton: {
-    padding: 4,
-  },
-  prayerContent: {
-    fontSize: 14,
-    lineHeight: 20,
-    marginTop: 12,
-  },
-  prayerFooter: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginTop: 16,
-    paddingTop: 12,
-    borderTopWidth: 1,
-  },
-  prayedCount: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  prayedText: {
-    fontSize: 13,
-  },
-  prayerActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  actionButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 8,
-    borderWidth: 1,
-  },
-  prayButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 8,
-  },
-  prayButtonText: {
-    color: '#FFFFFF',
-    fontWeight: '600',
-    fontSize: 14,
   },
   fab: {
     position: 'absolute',
