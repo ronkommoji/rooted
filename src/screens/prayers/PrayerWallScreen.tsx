@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { 
   View, 
   Text, 
@@ -9,10 +9,13 @@ import {
   Alert,
   Modal,
   KeyboardAvoidingView,
-  Platform
+  Platform,
+  Dimensions,
+  Animated
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { PIConfetti, PIConfettiMethods } from 'react-native-fast-confetti';
 import { useTheme } from '../../theme/ThemeContext';
 import { Card, Avatar, Header, PillToggle, Button, Input, EmptyState } from '../../components';
 import { useAppStore } from '../../store/useAppStore';
@@ -27,10 +30,20 @@ type PrayerWithDetails = Prayer & {
   user_prayed: boolean;
 };
 
+const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
+
 export const PrayerWallScreen: React.FC = () => {
   const { colors, isDark } = useTheme();
   const { currentGroup, profile, session } = useAppStore();
   const { sendPrayerNotification } = useNotifications();
+  
+  // Confetti ref for triggering animation
+  const confettiRef = useRef<PIConfettiMethods>(null);
+  const [showConfetti, setShowConfetti] = useState(false);
+  const [confettiPosition, setConfettiPosition] = useState<{ x: number; y: number } | null>(null);
+  
+  // Refs to measure prayer card positions
+  const prayerCardRefs = useRef<{ [key: string]: View | null }>({});
   
   const [filter, setFilter] = useState<'Requests' | 'Answered'>('Requests');
   const [prayers, setPrayers] = useState<PrayerWithDetails[]>([]);
@@ -55,6 +68,9 @@ export const PrayerWallScreen: React.FC = () => {
   
   // Track which prayers are being processed to prevent double-clicks
   const [processingPrayers, setProcessingPrayers] = useState<Set<string>>(new Set());
+  
+  // Track which prayer is being animated
+  const [animatingPrayerId, setAnimatingPrayerId] = useState<string | null>(null);
 
   const fetchPrayers = useCallback(async () => {
     if (!currentGroup?.id || !session?.user?.id) return;
@@ -201,6 +217,44 @@ export const PrayerWallScreen: React.FC = () => {
         {
           text: 'Yes',
           onPress: async () => {
+            // Set animating state to trigger card animation
+            setAnimatingPrayerId(prayer.id);
+            
+            // Measure the prayer card position
+            const cardRef = prayerCardRefs.current[prayer.id];
+            if (cardRef) {
+              // Small delay to ensure the card is rendered with animation state
+              setTimeout(() => {
+                cardRef.measureInWindow((x, y, width, height) => {
+                  // Calculate center of the card
+                  const centerX = x + width / 2;
+                  const centerY = y + height / 2;
+                  
+                  // Store position for confetti
+                  setConfettiPosition({ x: centerX, y: centerY });
+                  
+                  // After card animation completes (400ms total), trigger confetti
+                  setTimeout(() => {
+                    setShowConfetti(true);
+                    setTimeout(() => {
+                      confettiRef.current?.restart();
+                      setAnimatingPrayerId(null);
+                    }, 100);
+                  }, 400);
+                });
+              }, 50);
+            } else {
+              // Fallback to center if we can't measure
+              setConfettiPosition({ x: SCREEN_WIDTH / 2, y: SCREEN_HEIGHT / 2 });
+              setTimeout(() => {
+                setShowConfetti(true);
+                setTimeout(() => {
+                  confettiRef.current?.restart();
+                  setAnimatingPrayerId(null);
+                }, 100);
+              }, 400);
+            }
+            
             const { error } = await supabase
               .from('prayers')
               .update({ 
@@ -210,6 +264,7 @@ export const PrayerWallScreen: React.FC = () => {
               .eq('id', prayer.id);
 
             if (!error && currentGroup?.id) {
+              
               // Send push notification to OTHER group members (not the person who marked it as answered)
               const { data: groupMembers } = await supabase
                 .from('group_members')
@@ -385,11 +440,54 @@ export const PrayerWallScreen: React.FC = () => {
     return 'Just now';
   };
 
+  // Animation values for each prayer card
+  const prayerAnimations = useRef<{ [key: string]: Animated.Value }>({});
+
+  const getOrCreateAnimation = (prayerId: string) => {
+    if (!prayerAnimations.current[prayerId]) {
+      prayerAnimations.current[prayerId] = new Animated.Value(1);
+    }
+    return prayerAnimations.current[prayerId];
+  };
+
+  // Effect to handle card animation when animatingPrayerId changes
+  useEffect(() => {
+    if (animatingPrayerId) {
+      const scaleAnim = getOrCreateAnimation(animatingPrayerId);
+      Animated.sequence([
+        Animated.timing(scaleAnim, {
+          toValue: 1.05,
+          duration: 200,
+          useNativeDriver: true,
+        }),
+        Animated.timing(scaleAnim, {
+          toValue: 1,
+          duration: 200,
+          useNativeDriver: true,
+        }),
+      ]).start();
+    }
+  }, [animatingPrayerId]);
+
   const renderPrayerCard = ({ item: prayer }: { item: PrayerWithDetails }) => {
     const isOwnPrayer = prayer.user_id === session?.user?.id;
+    const scaleAnim = getOrCreateAnimation(prayer.id);
     
     return (
-      <Card style={styles.prayerCard}>
+      <Animated.View
+        ref={(ref: View | null) => {
+          if (ref) {
+            prayerCardRefs.current[prayer.id] = ref;
+          } else {
+            delete prayerCardRefs.current[prayer.id];
+          }
+        }}
+        collapsable={false}
+        style={{
+          transform: [{ scale: scaleAnim }],
+        }}
+      >
+        <Card style={styles.prayerCard}>
         {prayer.is_answered && (
           <View style={[styles.answeredBadge, { backgroundColor: colors.success }]}>
             <Ionicons name="checkmark-circle" size={14} color="#FFFFFF" style={{ marginRight: 4 }} />
@@ -460,11 +558,38 @@ export const PrayerWallScreen: React.FC = () => {
           </View>
         </View>
       </Card>
+      </Animated.View>
     );
   };
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
+      {/* Confetti Animation - positioned absolutely to overlay the screen */}
+      {showConfetti && SCREEN_WIDTH > 0 && SCREEN_HEIGHT > 0 && confettiPosition && (
+        <View style={styles.confettiContainer} pointerEvents="none">
+          <PIConfetti
+            ref={confettiRef}
+            count={200}
+            width={SCREEN_WIDTH}
+            height={SCREEN_HEIGHT}
+            blastPosition={confettiPosition}
+            blastRadius={200}
+            colors={['#4CAF50', '#8BC34A', '#CDDC39', '#FFC107', '#FF9800', '#FF5722', '#E91E63', '#9C27B0', '#673AB7', '#3F51B5', '#2196F3', '#00BCD4']}
+            fallDuration={5000}
+            blastDuration={300}
+            fadeOutOnEnd={true}
+            sizeVariation={0.3}
+            onAnimationEnd={() => {
+              // Hide confetti after animation completes
+              setTimeout(() => {
+                setShowConfetti(false);
+                setConfettiPosition(null);
+              }, 100);
+            }}
+          />
+        </View>
+      )}
+      
       <Header title="Prayer Wall" />
       
       <View style={styles.filterContainer}>
@@ -671,6 +796,14 @@ export const PrayerWallScreen: React.FC = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+  },
+  confettiContainer: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 9999,
   },
   filterContainer: {
     paddingHorizontal: 16,
