@@ -77,18 +77,9 @@ export const BibleScreen: React.FC = () => {
     setRefreshing(false);
   };
 
-  // Refresh comment counts when screen comes into focus
-  // This ensures counts are updated when navigating back from ChapterViewScreen
-  useFocusEffect(
-    React.useCallback(() => {
-      if (currentGroup?.id && bookNames.length > 0) {
-        // Small delay to ensure smooth transition
-        setTimeout(() => {
-          refetchBookCounts();
-        }, 100);
-      }
-    }, [currentGroup?.id, bookNames.length])
-  );
+  // Note: Removed useFocusEffect that was forcing refresh on every focus
+  // The hook now has built-in caching, so counts will only refresh when needed
+  // Users can still manually refresh using pull-to-refresh
 
   const selectedBookData = selectedBook
     ? bibleBooks.find((b) => b.name === selectedBook)

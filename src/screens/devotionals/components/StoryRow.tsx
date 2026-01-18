@@ -12,6 +12,11 @@ export interface MemberSubmission {
   likes: number;
   devotionalId?: string;
   isLiked?: boolean;
+  // For daily devotional completions
+  isDailyDevotional?: boolean;
+  dailyDevotionalComment?: string;
+  dailyDevotionalCommentId?: string;
+  dailyDevotionalImageUrl?: string; // Image from the /today API endpoint
 }
 
 interface StoryRowProps {
@@ -43,10 +48,17 @@ export const StoryRow: React.FC<StoryRowProps> = ({
     return name.split(' ')[0];
   };
 
-  // Sort: current user first, then others alphabetically
+  // Sort: current user first (if posted), then those who posted, then those who haven't
   const sortedMembers = [...members].sort((a, b) => {
+    // Current user always comes first
     if (a.memberId === currentUserId) return -1;
     if (b.memberId === currentUserId) return 1;
+    
+    // Then prioritize those who have posted
+    if (a.hasPosted && !b.hasPosted) return -1;
+    if (!a.hasPosted && b.hasPosted) return 1;
+    
+    // Within same group (both posted or both haven't), sort alphabetically
     return a.memberName.localeCompare(b.memberName);
   });
 
@@ -128,7 +140,7 @@ export const StoryRow: React.FC<StoryRowProps> = ({
 
 const styles = StyleSheet.create({
   container: {
-    marginBottom: 24,
+    marginBottom: 10,
   },
   scrollContent: {
     paddingHorizontal: 4,

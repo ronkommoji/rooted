@@ -12,11 +12,13 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { useTheme } from '../../../theme/ThemeContext';
+import { useDailyDevotional } from '../hooks/useDailyDevotional';
 
 interface AddDevotionalSheetProps {
   visible: boolean;
   onClose: () => void;
   onImageSelected: (imageUri: string) => void;
+  onDailyDevotionalComplete?: () => void;
   uploading?: boolean;
 }
 
@@ -24,10 +26,12 @@ export const AddDevotionalSheet: React.FC<AddDevotionalSheetProps> = ({
   visible,
   onClose,
   onImageSelected,
+  onDailyDevotionalComplete,
   uploading = false,
 }) => {
   const { colors, isDark } = useTheme();
   const [loading, setLoading] = useState(false);
+  const { allCompleted, completeDailyDevotional } = useDailyDevotional();
   
   const isLoading = loading || uploading;
 
@@ -108,6 +112,35 @@ export const AddDevotionalSheet: React.FC<AddDevotionalSheetProps> = ({
     } catch (error) {
       console.error('Error selecting image:', error);
       Alert.alert('Error', 'Failed to select image. Please try again.');
+      setLoading(false);
+    }
+  };
+
+  const handleCompleteInAppDevotional = async () => {
+    if (!allCompleted) {
+      Alert.alert(
+        'Complete All Items',
+        'Please complete Scripture, Devotional, and Prayer before submitting your daily devotional.',
+        [{ text: 'OK' }]
+      );
+      return;
+    }
+
+    setLoading(true);
+    try {
+      // Call the parent's handler which uses useDevotionals.addDailyDevotional
+      // This properly creates the devotional entry and updates the streak
+      if (onDailyDevotionalComplete) {
+        await onDailyDevotionalComplete();
+      } else {
+        // Fallback: if no handler provided, use the hook's method
+        await completeDailyDevotional();
+      }
+      onClose();
+    } catch (error) {
+      console.error('Error completing daily devotional:', error);
+      Alert.alert('Error', 'Failed to complete daily devotional. Please try again.');
+    } finally {
       setLoading(false);
     }
   };
@@ -201,6 +234,36 @@ export const AddDevotionalSheet: React.FC<AddDevotionalSheetProps> = ({
                 </Text>
                 <Text style={[styles.optionDesc, { color: colors.textSecondary }]}>
                   Choose an existing photo
+                </Text>
+              </TouchableOpacity>
+
+              {/* Complete In-App Devotional */}
+              <TouchableOpacity
+                style={[
+                  styles.optionCard,
+                  { 
+                    backgroundColor: colors.card, 
+                    borderColor: allCompleted ? (isDark ? '#3D5A50' : colors.primary) : colors.cardBorder,
+                    borderWidth: allCompleted ? 2 : 1,
+                  },
+                ]}
+                onPress={handleCompleteInAppDevotional}
+              >
+                <View
+                  style={[
+                    styles.iconContainer,
+                    { backgroundColor: (isDark ? '#3D5A50' : colors.primary) + '20' },
+                  ]}
+                >
+                  <Ionicons name="checkmark-circle" size={32} color={isDark ? '#3D5A50' : colors.primary} />
+                </View>
+                <Text style={[styles.optionTitle, { color: colors.text }]}>
+                  Complete In-App Devotional
+                </Text>
+                <Text style={[styles.optionDesc, { color: colors.textSecondary }]}>
+                  {allCompleted 
+                    ? 'All items completed ✓' 
+                    : 'Complete Scripture, Devotional, and Prayer first'}
                 </Text>
               </TouchableOpacity>
             </View>

@@ -344,6 +344,15 @@ export const deleteVerseComment = async (commentId: string): Promise<boolean> =>
   }
 };
 
+// Cache duration: 2 minutes for comment counts
+const COMMENT_COUNTS_CACHE_DURATION_MS = 2 * 60 * 1000;
+
+// Global cache for book comment counts (persists across hook instances)
+const bookCountsCache = new Map<string, { data: Record<string, number>; timestamp: number }>();
+
+// Global cache for chapter comment counts (persists across hook instances)
+const chapterCountsCache = new Map<string, { data: Record<number, number>; timestamp: number }>();
+
 /**
  * Hook to get comment counts for multiple books
  */
@@ -354,9 +363,21 @@ export const useBookCommentCounts = (
   const [counts, setCounts] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
 
-  const fetchCounts = useCallback(async () => {
+  const fetchCounts = useCallback(async (forceRefresh = false) => {
     if (!groupId || books.length === 0) {
       setCounts({});
+      setLoading(false);
+      return;
+    }
+
+    // Create cache key from books and groupId
+    const cacheKey = `${groupId}-${books.sort().join(',')}`;
+    const now = Date.now();
+    const cached = bookCountsCache.get(cacheKey);
+
+    // Check cache first
+    if (!forceRefresh && cached && (now - cached.timestamp) < COMMENT_COUNTS_CACHE_DURATION_MS) {
+      setCounts(cached.data);
       setLoading(false);
       return;
     }
@@ -367,6 +388,8 @@ export const useBookCommentCounts = (
       // Use optimized single query instead of multiple individual queries
       const countsMap = await getBookCommentCounts(books, groupId);
       setCounts(countsMap);
+      // Cache the result
+      bookCountsCache.set(cacheKey, { data: countsMap, timestamp: now });
     } catch (error) {
       console.error('Error fetching book comment counts:', error);
       // Fallback to empty counts on error
@@ -381,10 +404,24 @@ export const useBookCommentCounts = (
   }, [books, groupId]);
 
   useEffect(() => {
-    fetchCounts();
-  }, [fetchCounts]);
+    // Check cache first before fetching
+    const cacheKey = `${groupId}-${books.sort().join(',')}`;
+    const now = Date.now();
+    const cached = bookCountsCache.get(cacheKey);
 
-  return { counts, loading, refetch: fetchCounts };
+    if (cached && (now - cached.timestamp) < COMMENT_COUNTS_CACHE_DURATION_MS) {
+      setCounts(cached.data);
+      setLoading(false);
+      // Still fetch in background to ensure data is fresh
+      fetchCounts(false);
+      return;
+    }
+
+    // No cache or stale - fetch with loading
+    fetchCounts(false);
+  }, [fetchCounts, groupId, books.join(',')]);
+
+  return { counts, loading, refetch: () => fetchCounts(true) };
 };
 
 /**
@@ -398,9 +435,21 @@ export const useChapterCommentCounts = (
   const [counts, setCounts] = useState<Record<number, number>>({});
   const [loading, setLoading] = useState(true);
 
-  const fetchCounts = useCallback(async () => {
+  const fetchCounts = useCallback(async (forceRefresh = false) => {
     if (!groupId || !book || chapterCount === 0) {
       setCounts({});
+      setLoading(false);
+      return;
+    }
+
+    // Create cache key from book, chapterCount, and groupId
+    const cacheKey = `${groupId}-${book}-${chapterCount}`;
+    const now = Date.now();
+    const cached = chapterCountsCache.get(cacheKey);
+
+    // Check cache first
+    if (!forceRefresh && cached && (now - cached.timestamp) < COMMENT_COUNTS_CACHE_DURATION_MS) {
+      setCounts(cached.data);
       setLoading(false);
       return;
     }
@@ -411,6 +460,8 @@ export const useChapterCommentCounts = (
       // Use optimized single query instead of multiple individual queries
       const countsMap = await getChapterCommentCounts(book, chapterCount, groupId);
       setCounts(countsMap);
+      // Cache the result
+      chapterCountsCache.set(cacheKey, { data: countsMap, timestamp: now });
     } catch (error) {
       console.error('Error fetching chapter comment counts:', error);
       // Fallback to empty counts on error
@@ -425,8 +476,22 @@ export const useChapterCommentCounts = (
   }, [book, chapterCount, groupId]);
 
   useEffect(() => {
-    fetchCounts();
-  }, [fetchCounts]);
+    // Check cache first before fetching
+    const cacheKey = `${groupId}-${book}-${chapterCount}`;
+    const now = Date.now();
+    const cached = chapterCountsCache.get(cacheKey);
 
-  return { counts, loading, refetch: fetchCounts };
+    if (cached && (now - cached.timestamp) < COMMENT_COUNTS_CACHE_DURATION_MS) {
+      setCounts(cached.data);
+      setLoading(false);
+      // Still fetch in background to ensure data is fresh
+      fetchCounts(false);
+      return;
+    }
+
+    // No cache or stale - fetch with loading
+    fetchCounts(false);
+  }, [fetchCounts, groupId, book, chapterCount]);
+
+  return { counts, loading, refetch: () => fetchCounts(true) };
 };

@@ -13,7 +13,7 @@ import {
   Animated,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { format, parseISO } from 'date-fns';
 import DateTimePicker from '@react-native-community/datetimepicker';
@@ -23,7 +23,7 @@ import { useAppStore } from '../../store/useAppStore';
 import { supabase } from '../../lib/supabase';
 import { Prayer, Event, Profile } from '../../types/database';
 import { getCurrentWeekChallenge, WeeklyChallenge } from '../../data/weeklyChallenge';
-import { StoryRow, StoryViewerModal, AddDevotionalSheet } from '../devotionals/components';
+import { StoryRow, StoryViewerModal, AddDevotionalSheet, DailyDevotionalCard } from '../devotionals/components';
 import { useDevotionals } from '../devotionals/hooks';
 import { useNotifications } from '../../hooks/useNotifications';
 import { sendPushNotification } from '../../lib/notifications';
@@ -41,6 +41,10 @@ export const HomeScreen: React.FC = () => {
   const [weeklyChallenge, setWeeklyChallenge] = useState<WeeklyChallenge>(getCurrentWeekChallenge());
   const [recentPrayers, setRecentPrayers] = useState<PrayerWithProfile[]>([]);
   const [upcomingEvents, setUpcomingEvents] = useState<EventWithRsvpCount[]>([]);
+  
+  // Track when data was last fetched to avoid unnecessary refreshes
+  const lastFetchTime = useRef<number>(0);
+  const CACHE_DURATION_MS = 5 * 60 * 1000; // 5 minutes - refresh if data is older than this
   
   // Story/Devotional state
   const [showStoryViewer, setShowStoryViewer] = useState(false);
@@ -90,13 +94,23 @@ export const HomeScreen: React.FC = () => {
     currentUserHasPosted,
     onRefresh: refreshDevotionals,
     addDevotional,
+    addDailyDevotional,
     uploadImage,
   } = useDevotionals(today);
 
   const currentUserId = session?.user?.id || '';
 
-  const fetchData = useCallback(async () => {
+  const fetchData = useCallback(async (forceRefresh = false) => {
     if (!currentGroup?.id) return;
+
+    // Check if we need to refresh (data is stale or forced)
+    const now = Date.now();
+    const shouldRefresh = forceRefresh || (now - lastFetchTime.current > CACHE_DURATION_MS);
+    
+    if (!shouldRefresh && lastFetchTime.current > 0) {
+      // Data is still fresh, skip fetch
+      return;
+    }
 
     // Fetch recent prayers
     const { data: prayersData } = await supabase
@@ -112,12 +126,12 @@ export const HomeScreen: React.FC = () => {
     }
 
     // Fetch upcoming events
-    const now = new Date().toISOString();
+    const nowISO = new Date().toISOString();
     const { data: eventsData } = await supabase
       .from('events')
       .select('*')
       .eq('group_id', currentGroup.id)
-      .gte('event_date', now)
+      .gte('event_date', nowISO)
       .order('event_date', { ascending: true })
       .limit(2);
 
@@ -139,10 +153,14 @@ export const HomeScreen: React.FC = () => {
       );
       setUpcomingEvents(eventsWithCounts);
     }
+
+    // Update last fetch time
+    lastFetchTime.current = now;
   }, [currentGroup?.id]);
 
   useEffect(() => {
-    fetchData();
+    // Initial load - always fetch
+    fetchData(true);
     // Update challenge (in case week changed)
     setWeeklyChallenge(getCurrentWeekChallenge());
   }, [fetchData]);
@@ -150,9 +168,28 @@ export const HomeScreen: React.FC = () => {
   const onRefresh = async () => {
     setRefreshing(true);
     setWeeklyChallenge(getCurrentWeekChallenge());
-    await Promise.all([fetchData(), refreshDevotionals()]);
+    // Force refresh all data
+    await Promise.all([fetchData(true), refreshDevotionals()]);
     setRefreshing(false);
   };
+
+  // Smart refresh when screen comes into focus
+  // Only refresh if data is stale, otherwise show cached data immediately
+  useFocusEffect(
+    React.useCallback(() => {
+      const now = Date.now();
+      const isStale = now - lastFetchTime.current > CACHE_DURATION_MS;
+      
+      // Only refresh if data is stale or never fetched
+      if (isStale || lastFetchTime.current === 0) {
+        // Background refresh - don't block UI
+        fetchData(true);
+      }
+      
+      // Don't force refresh devotionals - they have their own caching
+      // They will only refresh if their cache is stale
+    }, [fetchData])
+  );
 
   const timeAgo = (date: string) => {
     const now = new Date();
@@ -410,6 +447,11 @@ export const HomeScreen: React.FC = () => {
           </View>
         )}
 
+        {/* Daily Devotional */}
+        <View style={styles.section}>
+          <DailyDevotionalCard />
+        </View>
+
         {/* Recent Prayer Requests */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
@@ -533,6 +575,16 @@ export const HomeScreen: React.FC = () => {
         visible={showAddDevotional}
         onClose={() => setShowAddDevotional(false)}
         onImageSelected={handleAddDevotional}
+        onDailyDevotionalComplete={async () => {
+          try {
+            await addDailyDevotional();
+            setShowAddDevotional(false);
+            // Navigate to Devotionals page
+            navigation.navigate('Devotionals');
+          } catch (error: any) {
+            Alert.alert('Error', error.message || 'Failed to complete daily devotional');
+          }
+        }}
         uploading={uploading}
       />
 
@@ -877,7 +929,7 @@ const styles = StyleSheet.create({
     paddingBottom: 20,
   },
   section: {
-    marginBottom: 24,
+    marginBottom: 12,
   },
   sectionHeader: {
     flexDirection: 'row',

@@ -1,9 +1,13 @@
-import { useState, useCallback, useMemo, useEffect } from 'react';
+import { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import { format, subDays } from 'date-fns';
 import { supabase, supabaseUrl } from '../../../lib/supabase';
 import { useAppStore } from '../../../store/useAppStore';
 import { Profile, Devotional, GroupMemberWithProfile } from '../../../types/database';
 import { MemberSubmission } from '../components/StoryRow';
+import { fetchTodayDevotional } from '../../../lib/devotionalApi';
+
+// Cache duration: 2 minutes for devotionals data
+const DEVOTIONALS_CACHE_DURATION_MS = 2 * 60 * 1000;
 
 // Types
 export interface DevotionalWithProfile extends Devotional {
@@ -29,6 +33,7 @@ interface UseDevotionalsReturn {
   fetchDevotionals: () => Promise<void>;
   onRefresh: () => Promise<void>;
   addDevotional: (imageUrl: string) => Promise<void>;
+  addDailyDevotional: () => Promise<void>; // For completing daily devotional (all 3 items)
   deleteDevotional: (devotionalId: string) => Promise<void>;
   toggleLike: (devotionalId: string) => Promise<void>;
   uploadImage: (imageUri: string) => Promise<string | null>;
@@ -42,29 +47,83 @@ export const useDevotionals = (selectedDate: Date): UseDevotionalsReturn => {
   const [devotionals, setDevotionals] = useState<DevotionalWithProfile[]>([]);
   const [userStreak, setUserStreak] = useState(0);
   const [likedDevotionalIds, setLikedDevotionalIds] = useState<Set<string>>(new Set());
+  const [dailyDevotionalImageUrl, setDailyDevotionalImageUrl] = useState<string | null>(null);
+
+  // Cache tracking - track last fetch time per date
+  const lastFetchTime = useRef<Record<string, number>>({});
+  const cachedData = useRef<Record<string, {
+    devotionals: DevotionalWithProfile[];
+    userStreak: number;
+    likedDevotionalIds: Set<string>;
+  }>>({});
 
   const selectedDateISO = format(selectedDate, 'yyyy-MM-dd');
   const currentUserId = session?.user?.id;
 
+  // Fetch daily devotional image for today
+  useEffect(() => {
+    const fetchDailyDevotionalImage = async () => {
+      try {
+        const devotional = await fetchTodayDevotional();
+        if (devotional?.image_url) {
+          setDailyDevotionalImageUrl(devotional.image_url);
+        }
+      } catch (error) {
+        console.error('Error fetching daily devotional image:', error);
+      }
+    };
+
+    // Only fetch if we're looking at today's date
+    const today = format(new Date(), 'yyyy-MM-dd');
+    if (selectedDateISO === today) {
+      fetchDailyDevotionalImage();
+    } else {
+      setDailyDevotionalImageUrl(null);
+    }
+  }, [selectedDateISO]);
+
   // Fetch devotionals for the selected date
-  const fetchDevotionals = useCallback(async () => {
+  const fetchDevotionals = useCallback(async (forceRefresh = false) => {
     if (!currentGroup?.id || !currentUserId) {
       setLoading(false);
       return;
     }
 
+    // Check cache first
+    const now = Date.now();
+    const lastFetch = lastFetchTime.current[selectedDateISO] || 0;
+    const isStale = (now - lastFetch) > DEVOTIONALS_CACHE_DURATION_MS;
+    
+    // If we have cached data and it's not stale, use it
+    if (!forceRefresh && !isStale && cachedData.current[selectedDateISO]) {
+      const cached = cachedData.current[selectedDateISO];
+      setDevotionals(cached.devotionals);
+      setUserStreak(cached.userStreak);
+      setLikedDevotionalIds(cached.likedDevotionalIds);
+      setLoading(false);
+      return;
+    }
+
     try {
-      // Fetch group members, devotionals, and streak in parallel
-      const [groupMembersResult, devotionalsResult, streakResult] = await Promise.all([
+      // Fetch group members, devotionals, daily devotional completions, and streak in parallel
+      const [groupMembersResult, devotionalsResult, dailyCompletionsResult, streakResult] = await Promise.all([
         // Fetch group members if needed
         groupMembers.length === 0 ? fetchGroupMembers() : Promise.resolve(),
         
-        // Fetch devotionals for selected date
+        // Fetch devotionals for selected date (only those with images)
         supabase
           .from('devotionals')
           .select('*, profiles(*)')
           .eq('group_id', currentGroup.id)
-          .eq('post_date', selectedDateISO),
+          .eq('post_date', selectedDateISO)
+          .not('image_url', 'is', null),
+        
+        // Fetch daily devotional completions for selected date
+        supabase
+          .from('daily_devotional_completions')
+          .select('user_id, scripture_completed, devotional_completed, prayer_completed')
+          .eq('group_id', currentGroup.id)
+          .eq('date', selectedDateISO),
         
         // Fetch user streak
         supabase
@@ -76,6 +135,7 @@ export const useDevotionals = (selectedDate: Date): UseDevotionalsReturn => {
       ]);
 
       const { data: devotionalsData, error } = devotionalsResult as { data: any; error: any };
+      const { data: dailyCompletionsData } = dailyCompletionsResult as { data: any; error: any };
 
       if (error) {
         console.error('Error fetching devotionals:', error);
@@ -83,8 +143,17 @@ export const useDevotionals = (selectedDate: Date): UseDevotionalsReturn => {
         return;
       }
 
-      // Early return if no devotionals
-      if (!devotionalsData || devotionalsData.length === 0) {
+      // Store daily completions for later use (we'll fetch comments separately)
+      // Just mark that these users completed daily devotional
+      const dailyCompletionsUserIds = new Set<string>();
+      (dailyCompletionsData || []).forEach((completion: any) => {
+        if (completion.scripture_completed && completion.devotional_completed && completion.prayer_completed) {
+          dailyCompletionsUserIds.add(completion.user_id);
+        }
+      });
+
+      // Early return if no devotionals and no daily completions
+      if ((!devotionalsData || devotionalsData.length === 0) && dailyCompletionsUserIds.size === 0) {
         setDevotionals([]);
         setLikedDevotionalIds(new Set());
         const streakData = streakResult as { data: any };
@@ -93,24 +162,29 @@ export const useDevotionals = (selectedDate: Date): UseDevotionalsReturn => {
         return;
       }
 
-      // Get all devotional IDs
-      const devotionalIds = devotionalsData.map((d: any) => d.id);
+      // Get all devotional IDs (only if we have devotionals)
+      const devotionalIds = (devotionalsData || []).map((d: any) => d.id);
 
-      // Fetch all likes in a single query
-      const { data: allLikes, error: likesError } = await supabase
-        .from('devotional_likes')
-        .select('devotional_id, user_id')
-        .in('devotional_id', devotionalIds);
-
-      if (likesError) {
-        console.error('Error fetching likes:', likesError);
+      // Fetch all likes in a single query (only if we have devotionals)
+      let allLikes: any[] = [];
+      if (devotionalIds.length > 0) {
+        const { data: likesData, error: likesError } = await supabase
+          .from('devotional_likes')
+          .select('devotional_id, user_id')
+          .in('devotional_id', devotionalIds);
+        
+        if (likesError) {
+          console.error('Error fetching likes:', likesError);
+        } else {
+          allLikes = likesData || [];
+        }
       }
 
       // Build a map of likes count and user likes
       const likesCountMap = new Map<string, number>();
       const userLikesSet = new Set<string>();
 
-      (allLikes || []).forEach((like: any) => {
+      allLikes.forEach((like: any) => {
         const count = likesCountMap.get(like.devotional_id) || 0;
         likesCountMap.set(like.devotional_id, count + 1);
         
@@ -131,7 +205,16 @@ export const useDevotionals = (selectedDate: Date): UseDevotionalsReturn => {
 
       // Set streak
       const streakData = streakResult as { data: any };
-      setUserStreak(streakData?.data?.current_streak || 0);
+      const streak = streakData?.data?.current_streak || 0;
+      setUserStreak(streak);
+
+      // Cache the data
+      lastFetchTime.current[selectedDateISO] = now;
+      cachedData.current[selectedDateISO] = {
+        devotionals: devotionalsWithLikes,
+        userStreak: streak,
+        likedDevotionalIds: userLikesSet,
+      };
     } catch (error) {
       console.error('Error in fetchDevotionals:', error);
     } finally {
@@ -139,43 +222,164 @@ export const useDevotionals = (selectedDate: Date): UseDevotionalsReturn => {
     }
   }, [currentGroup?.id, currentUserId, selectedDateISO, groupMembers.length, fetchGroupMembers]);
 
-  // Initial fetch
+  // Initial fetch - check cache first before setting loading
   useEffect(() => {
+    // Check cache first
+    const now = Date.now();
+    const lastFetch = lastFetchTime.current[selectedDateISO] || 0;
+    const isStale = (now - lastFetch) > DEVOTIONALS_CACHE_DURATION_MS;
+    
+    // If we have cached data and it's not stale, use it immediately
+    if (!isStale && cachedData.current[selectedDateISO]) {
+      const cached = cachedData.current[selectedDateISO];
+      setDevotionals(cached.devotionals);
+      setUserStreak(cached.userStreak);
+      setLikedDevotionalIds(cached.likedDevotionalIds);
+      setLoading(false);
+      // Still fetch in background to ensure data is fresh
+      fetchDevotionals(false);
+      return;
+    }
+    
+    // No cache or stale - fetch with loading
     setLoading(true);
-    fetchDevotionals();
-  }, [fetchDevotionals]);
+    fetchDevotionals(false);
+  }, [fetchDevotionals, selectedDateISO]);
+
+  // Store daily devotional completions with comments
+  // Map structure: userId -> { hasComment: boolean, commentText?: string, commentId?: string }
+  const [dailyCompletions, setDailyCompletions] = useState<Map<string, { hasComment: boolean; commentText?: string; commentId?: string }>>(new Map());
+  
+  // Store which users completed daily devotional (all 3 items) - separate from comments
+  const [dailyCompletionUserIds, setDailyCompletionUserIds] = useState<Set<string>>(new Set());
+
+  // Fetch daily devotional completions and comments
+  useEffect(() => {
+    const fetchDailyCompletions = async () => {
+      if (!currentGroup?.id || !selectedDateISO) {
+        setDailyCompletions(new Map());
+        setDailyCompletionUserIds(new Set());
+        return;
+      }
+
+      try {
+        // Fetch daily devotional completions
+        const { data: completions } = await supabase
+          .from('daily_devotional_completions')
+          .select('user_id, scripture_completed, devotional_completed, prayer_completed')
+          .eq('group_id', currentGroup.id)
+          .eq('date', selectedDateISO);
+
+        if (!completions || completions.length === 0) {
+          setDailyCompletions(new Map());
+          setDailyCompletionUserIds(new Set());
+          return;
+        }
+
+        // Get all users who completed daily devotional (all 3 items)
+        const completedUserIds = completions
+          .filter((c: any) => c.scripture_completed && c.devotional_completed && c.prayer_completed)
+          .map((c: any) => c.user_id);
+
+        setDailyCompletionUserIds(new Set(completedUserIds));
+
+        if (completedUserIds.length === 0) {
+          setDailyCompletions(new Map());
+          return;
+        }
+
+        // Find devotional entries that might have comments (created by DevotionalDetailScreen)
+        const { data: devotionalEntries } = await supabase
+          .from('devotionals')
+          .select('id, user_id, content')
+          .eq('group_id', currentGroup.id)
+          .eq('post_date', selectedDateISO)
+          .in('user_id', completedUserIds)
+          .or('content.ilike.%Daily Devotional%');
+
+        // For each user, check if they have a comment
+        const completionsMap = new Map();
+        for (const userId of completedUserIds) {
+          const entry = devotionalEntries?.find((e: any) => e.user_id === userId);
+          if (entry) {
+            // Check for comments
+            const { data: comments } = await supabase
+              .from('devotional_comments')
+              .select('id, content')
+              .eq('devotional_id', entry.id)
+              .order('created_at', { ascending: false })
+              .limit(1);
+
+            if (comments && comments.length > 0) {
+              completionsMap.set(userId, {
+                hasComment: true,
+                commentText: comments[0].content,
+                commentId: comments[0].id,
+              });
+            } else {
+              completionsMap.set(userId, { hasComment: false });
+            }
+          } else {
+            completionsMap.set(userId, { hasComment: false });
+          }
+        }
+
+        setDailyCompletions(completionsMap);
+      } catch (error) {
+        console.error('Error fetching daily completions:', error);
+        setDailyCompletions(new Map());
+        setDailyCompletionUserIds(new Set());
+      }
+    };
+
+    fetchDailyCompletions();
+  }, [currentGroup?.id, selectedDateISO]);
 
   // Build member submissions
   const memberSubmissions: MemberSubmission[] = useMemo(() => {
     return groupMembers.map((member) => {
       const devotional = devotionals.find((d) => d.user_id === member.user_id);
+      const hasCompletedDaily = dailyCompletionUserIds.has(member.user_id);
+      const dailyCompletion = dailyCompletions.get(member.user_id);
+      
+      // hasPosted is true if they have an image devotional OR completed daily devotional
+      const hasPosted = !!devotional || hasCompletedDaily;
+
       return {
         memberId: member.user_id,
         memberName: member.profiles?.full_name || 'Unknown',
         imageUrl: devotional?.image_url || null,
-        hasPosted: !!devotional,
-        createdAt: devotional?.created_at || null,
+        hasPosted,
+        createdAt: devotional?.created_at || (hasCompletedDaily ? new Date().toISOString() : null),
         likes: devotional?.likes_count || 0,
         devotionalId: devotional?.id,
         isLiked: devotional ? likedDevotionalIds.has(devotional.id) : false,
+        // Daily devotional info
+        isDailyDevotional: hasCompletedDaily && !devotional,
+        dailyDevotionalComment: dailyCompletion?.hasComment ? dailyCompletion.commentText : undefined,
+        dailyDevotionalCommentId: dailyCompletion?.commentId,
+        dailyDevotionalImageUrl: hasCompletedDaily && !devotional ? dailyDevotionalImageUrl || undefined : undefined,
       };
     });
-  }, [groupMembers, devotionals, likedDevotionalIds]);
+  }, [groupMembers, devotionals, likedDevotionalIds, dailyCompletions, dailyCompletionUserIds, dailyDevotionalImageUrl]);
 
-  // Feed submissions (only those who posted, sorted by most recent)
+  // Feed submissions (only those who posted WITH IMAGES, sorted by most recent)
+  // Exclude daily devotional completions without images
   const feedSubmissions = useMemo(() => {
     return memberSubmissions
-      .filter((m) => m.hasPosted)
+      .filter((m) => m.hasPosted && m.imageUrl) // Only show entries with images
       .sort((a, b) => {
         if (!a.createdAt || !b.createdAt) return 0;
         return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
       });
   }, [memberSubmissions]);
 
-  // Check if current user has posted
+  // Check if current user has posted (either image devotional or daily devotional completion)
   const currentUserHasPosted = useMemo(() => {
-    return devotionals.some((d) => d.user_id === currentUserId);
-  }, [devotionals, currentUserId]);
+    const hasImageDevotional = devotionals.some((d) => d.user_id === currentUserId);
+    const hasDailyDevotional = currentUserId ? dailyCompletionUserIds.has(currentUserId) : false;
+    return hasImageDevotional || hasDailyDevotional;
+  }, [devotionals, currentUserId, dailyCompletionUserIds]);
 
   // Progress counts
   const completedCount = feedSubmissions.length;
@@ -184,7 +388,7 @@ export const useDevotionals = (selectedDate: Date): UseDevotionalsReturn => {
   // Refresh handler
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    await fetchDevotionals();
+    await fetchDevotionals(true); // Force refresh
     setRefreshing(false);
   }, [fetchDevotionals]);
 
@@ -457,6 +661,40 @@ export const useDevotionals = (selectedDate: Date): UseDevotionalsReturn => {
     }
   }, [currentUserId, likedDevotionalIds, fetchDevotionals]);
 
+  // Add daily devotional (when all 3 items are completed)
+  // This only updates the streak - it does NOT create a devotional entry
+  // The story will be shown based on daily_devotional_completions table
+  const addDailyDevotional = useCallback(async () => {
+    if (!currentGroup?.id || !currentUserId) {
+      throw new Error('User or group not available');
+    }
+
+    try {
+      // Verify all 3 items are completed
+      const { data: completion } = await supabase
+        .from('daily_devotional_completions')
+        .select('scripture_completed, devotional_completed, prayer_completed')
+        .eq('user_id', currentUserId)
+        .eq('group_id', currentGroup.id)
+        .eq('date', selectedDateISO)
+        .single();
+
+      if (!completion || !completion.scripture_completed || !completion.devotional_completed || !completion.prayer_completed) {
+        throw new Error('All items must be completed first');
+      }
+
+      // Only update streak - do NOT create a devotional entry
+      // The story will be shown based on daily_devotional_completions table
+      await updateStreak();
+
+      // Refresh data to update streak display and story
+      await fetchDevotionals();
+    } catch (error) {
+      console.error('Error adding daily devotional:', error);
+      throw error;
+    }
+  }, [currentGroup?.id, currentUserId, selectedDateISO, updateStreak, fetchDevotionals]);
+
   return {
     memberSubmissions,
     feedSubmissions,
@@ -469,6 +707,7 @@ export const useDevotionals = (selectedDate: Date): UseDevotionalsReturn => {
     fetchDevotionals,
     onRefresh,
     addDevotional,
+    addDailyDevotional,
     deleteDevotional,
     toggleLike,
     uploadImage,

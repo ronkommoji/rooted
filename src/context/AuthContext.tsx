@@ -77,7 +77,12 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         if (sessionError) {
           console.error('Error getting session:', sessionError);
           // Continue without session - user will see login screen
+          // setSession(null) will set isGroupChecked=true since there's no session
           setSession(null);
+          // Still need to clear loading state
+          setLoading(false);
+          isInitializing.current = false;
+          hasInitialized.current = true;
           return;
         }
 
@@ -140,6 +145,15 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
       // Force loading to false
       setLoading(false);
+      
+      // If there's a session but group check hasn't completed, mark it as checked
+      // This is a safety mechanism - app will show with current state (may need to refetch)
+      const currentSession = useAppStore.getState().session;
+      const isGroupChecked = useAppStore.getState().isGroupChecked;
+      if (currentSession && !isGroupChecked) {
+        console.warn('Force reset: marking group as checked to prevent infinite loading');
+        useAppStore.getState().setGroupChecked(true);
+      }
     };
 
     // Handle app state changes (foreground/background)
@@ -266,6 +280,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
               }
             });
           }
+          // Note: When newSession is null (sign out), setSession(null) already handles
+          // setting isGroupChecked=true and clearing group state
         } catch (error) {
           console.error('Error handling auth state change:', error);
         } finally {

@@ -10,6 +10,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { startOfWeek } from 'date-fns';
 import { useTheme } from '../../theme/ThemeContext';
@@ -22,6 +23,7 @@ import {
   SubmissionCard,
   AddDevotionalSheet,
   StoryViewerModal,
+  DailyDevotionalCard,
 } from './components';
 import { useDevotionals } from './hooks';
 
@@ -51,12 +53,17 @@ export const DevotionalsScreen: React.FC = () => {
     refreshing,
     onRefresh,
     addDevotional,
+    addDailyDevotional,
     deleteDevotional,
     toggleLike,
     uploadImage,
   } = useDevotionals(selectedDate);
 
   const currentUserId = session?.user?.id || '';
+
+  // Note: Removed useFocusEffect that was forcing refresh on every focus
+  // The hook now has built-in caching, so data will only refresh when needed
+  // Users can still manually refresh using pull-to-refresh
 
   // Handlers
   const handleMemberStoryPress = (memberId: string) => {
@@ -144,13 +151,15 @@ export const DevotionalsScreen: React.FC = () => {
 
         {/* Story Row */}
         {memberSubmissions.length > 0 ? (
-          <StoryRow
-            members={memberSubmissions}
-            currentUserId={currentUserId}
-            currentUserHasPosted={currentUserHasPosted}
-            onMemberPress={handleMemberStoryPress}
-            onAddPress={() => setShowAddSheet(true)}
-          />
+          <View style={styles.section}>
+            <StoryRow
+              members={memberSubmissions}
+              currentUserId={currentUserId}
+              currentUserHasPosted={currentUserHasPosted}
+              onMemberPress={handleMemberStoryPress}
+              onAddPress={() => setShowAddSheet(true)}
+            />
+          </View>
         ) : (
           <View style={styles.noMembersContainer}>
             <Text style={[styles.noMembersText, { color: colors.textSecondary }]}>
@@ -158,6 +167,11 @@ export const DevotionalsScreen: React.FC = () => {
             </Text>
           </View>
         )}
+
+        {/* Daily Devotional Card */}
+        <View style={styles.section}>
+          <DailyDevotionalCard />
+        </View>
 
         {/* Submissions Feed */}
         <View style={styles.feedSection}>
@@ -228,6 +242,14 @@ export const DevotionalsScreen: React.FC = () => {
         visible={showAddSheet}
         onClose={() => setShowAddSheet(false)}
         onImageSelected={handleAddDevotional}
+        onDailyDevotionalComplete={async () => {
+          try {
+            await addDailyDevotional();
+            setShowAddSheet(false);
+          } catch (error: any) {
+            Alert.alert('Error', error.message || 'Failed to complete daily devotional');
+          }
+        }}
         uploading={uploading}
       />
 
@@ -264,6 +286,9 @@ const styles = StyleSheet.create({
   },
   noMembersText: {
     fontSize: 14,
+  },
+  section: {
+    marginBottom: 12,
   },
   feedSection: {
     marginTop: 8,
