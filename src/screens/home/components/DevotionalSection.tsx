@@ -82,13 +82,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 12,
-    paddingHorizontal: 16,
   },
   sectionTitle: {
-    fontSize: 12,
+    fontSize: 18,
     fontWeight: '700',
-    letterSpacing: 1,
+    marginBottom: 12,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
   seeAll: {
     fontSize: 14,
