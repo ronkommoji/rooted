@@ -8,7 +8,7 @@ import { useNotificationContext } from '../context/NotificationContext';
 import { AuthNavigator } from './AuthNavigator';
 import { MainNavigator } from './MainNavigator';
 import { OnboardingScreen } from '../screens/onboarding/OnboardingScreen';
-import { GrowthAnimation } from '../../RootedAnimation';
+import { GrowthAnimation } from '../components/GrowthAnimation';
 
 export const RootNavigator: React.FC = () => {
   const { session, isLoading } = useAuth();
@@ -23,7 +23,7 @@ export const RootNavigator: React.FC = () => {
   // Show animation if it hasn't completed yet
   if (!animationCompleted) {
     return (
-      <View style={[styles.container, { backgroundColor: colors.background }]}>
+      <View style={[styles.container, styles.beigeBackground]}>
         <GrowthAnimation onComplete={() => setAnimationCompleted(true)} />
       </View>
     );
@@ -56,6 +56,9 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  beigeBackground: {
+    backgroundColor: '#F5F4EF',
   },
 });
 
