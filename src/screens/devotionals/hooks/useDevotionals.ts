@@ -5,6 +5,8 @@ import { useAppStore } from '../../../store/useAppStore';
 import { Profile, Devotional, GroupMemberWithProfile } from '../../../types/database';
 import { MemberSubmission } from '../components/StoryRow';
 import { fetchTodayDevotional } from '../../../lib/devotionalApi';
+import { validateImage, generateUniqueFilename } from '../../../lib/fileValidation';
+import { logger } from '../../../lib/logger';
 
 // Cache duration: 2 minutes for devotionals data
 const DEVOTIONALS_CACHE_DURATION_MS = 2 * 60 * 1000;
@@ -397,25 +399,47 @@ export const useDevotionals = (selectedDate: Date): UseDevotionalsReturn => {
     if (!currentUserId) return null;
 
     try {
+      // Validate image before uploading
+      const validation = await validateImage(imageUri, {
+        maxSize: 5 * 1024 * 1024, // 5MB limit
+        maxWidth: 4000,
+        maxHeight: 4000,
+      });
+
+      if (!validation.valid) {
+        logger.error('Image validation failed', undefined, {
+          error: validation.error,
+          userId: currentUserId,
+        });
+        throw new Error(validation.error || 'Invalid image');
+      }
+
+      logger.info('Image validated successfully', {
+        fileSize: validation.fileSize,
+        mimeType: validation.mimeType,
+        userId: currentUserId,
+      });
+
       // Create file name with user ID and timestamp
-      const timestamp = Date.now();
       const fileExt = imageUri.split('.').pop()?.toLowerCase() || 'jpg';
-      const fileName = `${currentUserId}/${timestamp}.${fileExt}`;
+      const fileName = generateUniqueFilename(`devotional.${fileExt}`, currentUserId);
+      const filePathWithFolder = `${currentUserId}/${fileName}`;
 
       // For React Native, we need to create a FormData and use the file URI directly
       const formData = new FormData();
       formData.append('file', {
         uri: imageUri,
-        name: `${timestamp}.${fileExt}`,
-        type: `image/${fileExt === 'jpg' ? 'jpeg' : fileExt}`,
+        name: fileName,
+        type: validation.mimeType || `image/${fileExt === 'jpg' ? 'jpeg' : fileExt}`,
       } as any);
 
       // Upload to Supabase Storage using fetch with FormData
       const { data: sessionData } = await supabase.auth.getSession();
       const accessToken = sessionData?.session?.access_token;
 
+      const startTime = Date.now();
       const uploadResponse = await fetch(
-        `${supabaseUrl}/storage/v1/object/devotionals/${fileName}`,
+        `${supabaseUrl}/storage/v1/object/devotionals/${filePathWithFolder}`,
         {
           method: 'POST',
           headers: {
@@ -428,18 +452,29 @@ export const useDevotionals = (selectedDate: Date): UseDevotionalsReturn => {
 
       if (!uploadResponse.ok) {
         const errorText = await uploadResponse.text();
-        console.error('Error uploading image:', errorText);
+        logger.error('Failed to upload image to storage', undefined, {
+          status: uploadResponse.status,
+          error: errorText,
+          userId: currentUserId,
+        });
         return null;
       }
+
+      const uploadDuration = Date.now() - startTime;
+      logger.info('Image uploaded successfully', {
+        duration: `${uploadDuration}ms`,
+        userId: currentUserId,
+        fileSize: validation.fileSize,
+      });
 
       // Get public URL
       const { data: urlData } = supabase.storage
         .from('devotionals')
-        .getPublicUrl(fileName);
+        .getPublicUrl(filePathWithFolder);
 
       return urlData.publicUrl;
     } catch (error) {
-      console.error('Error in uploadImage:', error);
+      logger.error('Error in uploadImage', error as Error, { userId: currentUserId });
       return null;
     }
   }, [currentUserId]);
