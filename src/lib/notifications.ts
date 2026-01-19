@@ -2,7 +2,7 @@ import * as Notifications from 'expo-notifications';
 import * as Device from 'expo-device';
 import Constants from 'expo-constants';
 import { Platform } from 'react-native';
-import { format, addDays, isBefore, differenceInHours, startOfDay, isSameDay } from 'date-fns';
+import { format, addDays, isBefore, differenceInHours, startOfDay, isSameDay, subDays } from 'date-fns';
 import { supabase, supabaseUrl } from './supabase';
 
 // Configure notification behavior with conditional logic for devotional reminders
@@ -68,7 +68,7 @@ Notifications.setNotificationHandler({
 });
 
 export interface NotificationData {
-  type: 'prayer' | 'devotional' | 'event';
+  type: 'prayer' | 'devotional' | 'event' | 'prayer_reminder' | 'smart_followup' | 'smart_missed';
   screen?: string;
   id?: string;
   [key: string]: any;
@@ -131,40 +131,61 @@ export async function requestNotificationPermissions(): Promise<boolean> {
 }
 
 /**
- * Schedule a daily devotional reminder
+ * Schedule multiple daily devotional reminders
+ * Accepts array of {hour, minute} objects for up to 3 reminders
+ */
+export async function scheduleDevotionalReminders(
+  reminderTimes: Array<{ hour: number; minute: number }>
+): Promise<string[]> {
+  try {
+    // Cancel any existing devotional reminders
+    await cancelDevotionalReminders();
+
+    const identifiers: string[] = [];
+
+    // Schedule up to 3 reminders
+    for (let i = 0; i < Math.min(reminderTimes.length, 3); i++) {
+      const { hour, minute } = reminderTimes[i];
+      
+      const identifier = await Notifications.scheduleNotificationAsync({
+        content: {
+          title: 'Time for Your Devotional 🌱',
+          body: 'Make sure you spend your time in God\'s Word and share with your group members!',
+          sound: true,
+          data: {
+            type: 'devotional',
+            screen: 'Devotionals',
+            reminderIndex: i + 1,
+          } as NotificationData,
+        },
+        trigger: {
+          type: 'daily',
+          hour,
+          minute,
+          repeats: true,
+        },
+      });
+
+      identifiers.push(identifier);
+    }
+
+    return identifiers;
+  } catch (error) {
+    console.error('Error scheduling devotional reminders:', error);
+    return [];
+  }
+}
+
+/**
+ * Schedule a single daily devotional reminder (backward compatibility)
  * Default time: 7:00 AM
  */
 export async function scheduleDevotionalReminder(
   hour: number = 7,
   minute: number = 0
 ): Promise<string | null> {
-  try {
-    // Cancel any existing devotional reminders
-    await cancelDevotionalReminders();
-
-    const identifier = await Notifications.scheduleNotificationAsync({
-      content: {
-        title: 'Time for Your Devotional 🌱',
-        body: 'Make sure you spend your time in God\'s Word and share with your group members!',
-        sound: true,
-        data: {
-          type: 'devotional',
-          screen: 'Devotionals',
-        } as NotificationData,
-      },
-      trigger: {
-        type: 'daily',
-        hour,
-        minute,
-        repeats: true,
-      },
-    });
-
-    return identifier;
-  } catch (error) {
-    console.error('Error scheduling devotional reminder:', error);
-    return null;
-  }
+  const identifiers = await scheduleDevotionalReminders([{ hour, minute }]);
+  return identifiers[0] || null;
 }
 
 /**
@@ -184,6 +205,63 @@ export async function cancelDevotionalReminders(): Promise<void> {
     );
   } catch (error) {
     console.error('Error canceling devotional reminders:', error);
+  }
+}
+
+/**
+ * Schedule a daily prayer reminder
+ * Default time: 8:00 PM (20:00)
+ */
+export async function schedulePrayerReminder(
+  hour: number = 20,
+  minute: number = 0
+): Promise<string | null> {
+  try {
+    // Cancel any existing prayer reminders
+    await cancelPrayerReminders();
+
+    const identifier = await Notifications.scheduleNotificationAsync({
+      content: {
+        title: 'Time to Pray 🙏',
+        body: 'Take a moment to pray for your group members and their prayer requests.',
+        sound: true,
+        data: {
+          type: 'prayer_reminder',
+          screen: 'Prayers',
+        } as NotificationData,
+      },
+      trigger: {
+        type: 'daily',
+        hour,
+        minute,
+        repeats: true,
+      },
+    });
+
+    return identifier;
+  } catch (error) {
+    console.error('Error scheduling prayer reminder:', error);
+    return null;
+  }
+}
+
+/**
+ * Cancel all prayer reminder notifications
+ */
+export async function cancelPrayerReminders(): Promise<void> {
+  try {
+    const allNotifications = await Notifications.getAllScheduledNotificationsAsync();
+    const prayerReminderNotifications = allNotifications.filter(
+      (notif) => notif.content.data?.type === 'prayer_reminder'
+    );
+
+    await Promise.all(
+      prayerReminderNotifications.map((notif) =>
+        Notifications.cancelScheduledNotificationAsync(notif.identifier)
+      )
+    );
+  } catch (error) {
+    console.error('Error canceling prayer reminders:', error);
   }
 }
 
@@ -516,5 +594,186 @@ export async function sendPushNotification(
     console.error('❌ Error calling push notification function:', error);
     console.error('Error message:', error?.message);
     console.error('Error stack:', error?.stack);
+  }
+}
+
+/**
+ * Check if user has completed devotional today and schedule follow-up reminder if not
+ * This is called daily at 2 PM to check completion status
+ */
+export async function checkAndScheduleFollowUpReminder(userId: string, groupId: string): Promise<void> {
+  try {
+    const today = format(new Date(), 'yyyy-MM-dd');
+    
+    // Check if user has posted a devotional today
+    const { data: devotional } = await supabase
+      .from('devotionals')
+      .select('id')
+      .eq('group_id', groupId)
+      .eq('user_id', userId)
+      .eq('post_date', today)
+      .single();
+
+    // If no devotional posted, schedule a follow-up reminder for 6 PM
+    if (!devotional) {
+      const now = new Date();
+      const followUpTime = new Date();
+      followUpTime.setHours(18, 0, 0, 0); // 6 PM
+
+      // Only schedule if 6 PM hasn't passed yet today
+      if (isBefore(now, followUpTime)) {
+        await Notifications.scheduleNotificationAsync({
+          content: {
+            title: 'Don\'t Forget Your Devotional 🌱',
+            body: 'You haven\'t completed your devotional today. Take a moment to spend time with God!',
+            sound: true,
+            data: {
+              type: 'smart_followup',
+              screen: 'Devotionals',
+            } as NotificationData,
+          },
+          trigger: {
+            type: 'date',
+            date: followUpTime,
+          },
+        });
+      }
+    }
+  } catch (error) {
+    console.error('Error checking and scheduling follow-up reminder:', error);
+  }
+}
+
+/**
+ * Check if user has missed posting devotionals for 2+ days and send reminder
+ * This is called daily at 9 AM
+ */
+export async function checkMissedDaysAndNotify(userId: string, groupId: string): Promise<void> {
+  try {
+    const today = format(new Date(), 'yyyy-MM-dd');
+    const twoDaysAgo = format(subDays(new Date(), 2), 'yyyy-MM-dd');
+    
+    // Check if user has posted in the last 2 days
+    const { data: recentDevotionals } = await supabase
+      .from('devotionals')
+      .select('post_date')
+      .eq('group_id', groupId)
+      .eq('user_id', userId)
+      .gte('post_date', twoDaysAgo)
+      .order('post_date', { ascending: false })
+      .limit(1);
+
+    // If no devotional in last 2 days, send encouraging reminder
+    if (!recentDevotionals || recentDevotionals.length === 0) {
+      await Notifications.scheduleNotificationAsync({
+        content: {
+          title: 'We Miss You! 🌱',
+          body: 'It\'s been a few days since your last devotional. Your group is here to support you!',
+          sound: true,
+          data: {
+            type: 'smart_missed',
+            screen: 'Devotionals',
+          } as NotificationData,
+        },
+        trigger: null, // Send immediately
+      });
+    }
+  } catch (error) {
+    console.error('Error checking missed days and notifying:', error);
+  }
+}
+
+/**
+ * Schedule smart notification checks
+ * - Follow-up check at 2 PM daily
+ * - Missed days check at 9 AM daily
+ */
+export async function scheduleSmartNotifications(userId: string, groupId: string): Promise<void> {
+  try {
+    // Cancel existing smart notification schedulers
+    await cancelSmartNotifications();
+
+    const now = new Date();
+    
+    // Schedule follow-up check at 2 PM daily
+    const followUpCheckTime = new Date();
+    followUpCheckTime.setHours(14, 0, 0, 0); // 2 PM
+    
+    // If 2 PM has passed today, schedule for tomorrow
+    if (!isBefore(now, followUpCheckTime)) {
+      followUpCheckTime.setDate(followUpCheckTime.getDate() + 1);
+    }
+
+    // Schedule daily check at 2 PM
+    await Notifications.scheduleNotificationAsync({
+      content: {
+        title: '', // Empty title - this is just a trigger
+        body: '',
+        data: {
+          type: 'smart_followup',
+          action: 'check',
+          userId,
+          groupId,
+        } as NotificationData,
+      },
+      trigger: {
+        type: 'daily',
+        hour: 14,
+        minute: 0,
+        repeats: true,
+      },
+    });
+
+    // Schedule missed days check at 9 AM daily
+    const missedCheckTime = new Date();
+    missedCheckTime.setHours(9, 0, 0, 0); // 9 AM
+    
+    // If 9 AM has passed today, schedule for tomorrow
+    if (!isBefore(now, missedCheckTime)) {
+      missedCheckTime.setDate(missedCheckTime.getDate() + 1);
+    }
+
+    await Notifications.scheduleNotificationAsync({
+      content: {
+        title: '', // Empty title - this is just a trigger
+        body: '',
+        data: {
+          type: 'smart_missed',
+          action: 'check',
+          userId,
+          groupId,
+        } as NotificationData,
+      },
+      trigger: {
+        type: 'daily',
+        hour: 9,
+        minute: 0,
+        repeats: true,
+      },
+    });
+  } catch (error) {
+    console.error('Error scheduling smart notifications:', error);
+  }
+}
+
+/**
+ * Cancel all smart notification schedulers
+ */
+export async function cancelSmartNotifications(): Promise<void> {
+  try {
+    const allNotifications = await Notifications.getAllScheduledNotificationsAsync();
+    const smartNotifications = allNotifications.filter(
+      (notif) => 
+        (notif.content.data?.type === 'smart_followup' || notif.content.data?.type === 'smart_missed') &&
+        notif.content.data?.action === 'check'
+    );
+
+    await Promise.all(
+      smartNotifications.map((notif) =>
+        Notifications.cancelScheduledNotificationAsync(notif.identifier)
+      )
+    );
+  } catch (error) {
+    console.error('Error canceling smart notifications:', error);
   }
 }
