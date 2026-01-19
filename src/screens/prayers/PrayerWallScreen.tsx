@@ -20,9 +20,17 @@ import { Header, PillToggle, Button, Input, EmptyState } from '../../components'
 import { PrayerCard, PrayerWithDetails } from '../../components/prayers/PrayerCard';
 import { useAppStore } from '../../store/useAppStore';
 import { supabase } from '../../lib/supabase';
-import { Prayer, Profile } from '../../types/database';
 import { useNotifications } from '../../hooks/useNotifications';
 import { sendPushNotification } from '../../lib/notifications';
+import {
+  usePrayersQuery,
+  useCreatePrayerMutation,
+  useUpdatePrayerMutation,
+  useDeletePrayerMutation,
+  useMarkPrayerAnsweredMutation,
+  useIncrementPrayerCountMutation,
+  type PrayerWithAuthor,
+} from '../../hooks/queries';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -40,129 +48,66 @@ export const PrayerWallScreen: React.FC = () => {
   const prayerCardRefs = useRef<{ [key: string]: View | null }>({});
   
   const [filter, setFilter] = useState<'Requests' | 'Answered'>('Requests');
-  const [prayers, setPrayers] = useState<PrayerWithDetails[]>([]);
-  const [refreshing, setRefreshing] = useState(false);
-  const [loading, setLoading] = useState(true);
   const [showCreateModal, setShowCreateModal] = useState(false);
-  const [answeredCount, setAnsweredCount] = useState(0);
   const [newPrayerTitle, setNewPrayerTitle] = useState('');
   const [newPrayerContent, setNewPrayerContent] = useState('');
-  const [creating, setCreating] = useState(false);
-  
+
   // Edit state
   const [showEditModal, setShowEditModal] = useState(false);
   const [editingPrayer, setEditingPrayer] = useState<PrayerWithDetails | null>(null);
   const [editPrayerTitle, setEditPrayerTitle] = useState('');
   const [editPrayerContent, setEditPrayerContent] = useState('');
-  const [updating, setUpdating] = useState(false);
-  
+
   // Menu state
   const [showMenuModal, setShowMenuModal] = useState(false);
   const [selectedPrayer, setSelectedPrayer] = useState<PrayerWithDetails | null>(null);
-  
+
   // Track which prayers are being processed to prevent double-clicks
   const [processingPrayers, setProcessingPrayers] = useState<Set<string>>(new Set());
-  
+
   // Track which prayer is being animated
   const [animatingPrayerId, setAnimatingPrayerId] = useState<string | null>(null);
 
-  const fetchPrayers = useCallback(async () => {
-    if (!currentGroup?.id || !session?.user?.id) return;
+  // React Query hooks
+  const isAnsweredFilter = filter === 'Answered';
+  const {
+    data: prayers = [],
+    isLoading: loading,
+    refetch,
+    isFetching,
+  } = usePrayersQuery(isAnsweredFilter);
 
-    const isAnswered = filter === 'Answered';
-    
-    const { data: prayersData, error } = await supabase
-      .from('prayers')
-      .select('*, profiles(*)')
-      .eq('group_id', currentGroup.id)
-      .eq('is_answered', isAnswered)
-      .order('created_at', { ascending: false });
+  // Fetch answered count separately
+  const { data: answeredPrayers = [] } = usePrayersQuery(true);
+  const answeredCount = answeredPrayers.length;
 
-    if (error) {
-      console.error('Error fetching prayers:', error);
-      return;
-    }
+  // Mutations
+  const createPrayerMutation = useCreatePrayerMutation();
+  const updatePrayerMutation = useUpdatePrayerMutation();
+  const deletePrayerMutation = useDeletePrayerMutation();
+  const markAnsweredMutation = useMarkPrayerAnsweredMutation();
+  const incrementPrayerCountMutation = useIncrementPrayerCountMutation();
 
-    // SIMPLE: Get prayer_count directly from prayers table - no other tables needed!
-    const prayersWithDetails = (prayersData || []).map((prayer) => ({
-      ...prayer,
-      total_prayed: (prayer as any).prayer_count || 0,
-    })) as PrayerWithDetails[];
-
-    setPrayers(prayersWithDetails);
-    setLoading(false);
-
-    // If on Answered tab, update answered count
-    if (isAnswered) {
-      setAnsweredCount(prayersWithDetails.length);
-    }
-  }, [currentGroup?.id, filter, session?.user?.id]);
-
-  // Fetch answered count separately for display
-  const fetchAnsweredCount = useCallback(async () => {
-    if (!currentGroup?.id) return;
-
-    const { count, error } = await supabase
-      .from('prayers')
-      .select('*', { count: 'exact', head: true })
-      .eq('group_id', currentGroup.id)
-      .eq('is_answered', true);
-
-    if (!error) {
-      setAnsweredCount(count || 0);
-    }
-  }, [currentGroup?.id]);
-
-  // Fetch answered count on mount and when prayers change
-  useEffect(() => {
-    fetchAnsweredCount();
-  }, [fetchAnsweredCount]);
-
-  useEffect(() => {
-    fetchPrayers();
-  }, [fetchPrayers]);
+  // Convert PrayerWithAuthor to PrayerWithDetails for compatibility
+  const prayersWithDetails: PrayerWithDetails[] = prayers.map((prayer: any) => ({
+    ...prayer,
+    total_prayed: prayer.prayer_count || 0,
+  }));
 
   const onRefresh = async () => {
-    setRefreshing(true);
-    await fetchPrayers();
-    setRefreshing(false);
+    await refetch();
   };
 
   const handlePray = async (prayer: PrayerWithDetails) => {
     if (!session?.user?.id) return;
-    
+
     // Prevent double-clicks
     if (processingPrayers.has(prayer.id)) return;
-    
-    setProcessingPrayers(prev => new Set(prev).add(prayer.id));
 
-    const currentCount = prayer.total_prayed;
+    setProcessingPrayers((prev) => new Set(prev).add(prayer.id));
 
-    // Optimistic update - increment count by 1
-    setPrayers(prev => prev.map(p => 
-      p.id === prayer.id 
-        ? { ...p, total_prayed: p.total_prayed + 1 }
-        : p
-    ));
-
-    // SIMPLE: Increment prayer_count atomically using database function
-    const { data, error } = await supabase.rpc('increment_prayer_count', {
-      prayer_id_param: prayer.id
-    });
-
-    if (error) {
-      console.error('Error incrementing prayer count:', error);
-      console.error('Error details:', JSON.stringify(error, null, 2));
-      // Revert on error
-      setPrayers(prev => prev.map(p => 
-        p.id === prayer.id 
-          ? { ...p, total_prayed: currentCount }
-          : p
-      ));
-    } else {
-      // Success! Refresh to get the accurate count from database
-      // This ensures the count is correct even if there were any issues
-      await fetchPrayers();
+    try {
+      await incrementPrayerCountMutation.mutateAsync(prayer.id);
 
       // Send push notification to prayer author if different from current user
       if (prayer.user_id !== session.user.id && profile) {
@@ -171,7 +116,7 @@ export const PrayerWallScreen: React.FC = () => {
           .from('user_preferences')
           .select('prayer_notifications')
           .eq('user_id', prayer.user_id)
-          .single();
+          .maybeSingle();
 
         if (authorPreferences?.prayer_notifications !== false) {
           // Send push notification
@@ -186,14 +131,16 @@ export const PrayerWallScreen: React.FC = () => {
           );
         }
       }
+    } catch (error) {
+      console.error('Error incrementing prayer count:', error);
+    } finally {
+      // Remove from processing set
+      setProcessingPrayers((prev) => {
+        const next = new Set(prev);
+        next.delete(prayer.id);
+        return next;
+      });
     }
-    
-    // Remove from processing set
-    setProcessingPrayers(prev => {
-      const next = new Set(prev);
-      next.delete(prayer.id);
-      return next;
-    });
   };
 
   const handleMarkAnswered = async (prayer: PrayerWithDetails) => {
@@ -247,60 +194,55 @@ export const PrayerWallScreen: React.FC = () => {
                 }, 100);
               }, 400);
             }
-            
-            const { error } = await supabase
-              .from('prayers')
-              .update({ 
-                is_answered: true, 
-                answered_at: new Date().toISOString() 
-              })
-              .eq('id', prayer.id);
 
-            if (!error && currentGroup?.id) {
-              
-              // Send push notification to OTHER group members (not the person who marked it as answered)
-              const { data: groupMembers } = await supabase
-                .from('group_members')
-                .select('user_id')
-                .eq('group_id', currentGroup.id);
+            try {
+              await markAnsweredMutation.mutateAsync(prayer.id);
 
-              if (groupMembers) {
-                // Filter out the current user who marked the prayer as answered
-                const otherMembers = groupMembers.filter(
-                  member => member.user_id !== session?.user?.id
-                );
+              // Send push notification to OTHER group members
+              if (currentGroup?.id) {
+                const { data: groupMembers } = await supabase
+                  .from('group_members')
+                  .select('user_id')
+                  .eq('group_id', currentGroup.id);
 
-                if (otherMembers.length > 0) {
-                  // Get preferences for other members only
-                  const userIds = otherMembers.map(m => m.user_id);
-                  const { data: preferences } = await supabase
-                    .from('user_preferences')
-                    .select('user_id, prayer_notifications')
-                    .in('user_id', userIds);
+                if (groupMembers) {
+                  // Filter out the current user
+                  const otherMembers = groupMembers.filter(
+                    (member) => member.user_id !== session?.user?.id
+                  );
 
-                  // Send push notification to each member with prayer_notifications enabled
-                  const notifications = otherMembers
-                    .filter(member => {
-                      // Check if user has prayer_notifications enabled (default to true if not set)
-                      const userPrefs = preferences?.find(p => p.user_id === member.user_id);
-                      return userPrefs?.prayer_notifications !== false;
-                    })
-                    .map(member =>
-                      sendPushNotification(
-                        member.user_id,
-                        '🙏 Prayer Answered!',
-                        `"${prayer.title}" has been marked as answered. Praise God!`,
-                        {
-                          type: 'prayer',
-                          id: prayer.id,
-                        }
-                      )
-                    );
+                  if (otherMembers.length > 0) {
+                    // Get preferences for other members
+                    const userIds = otherMembers.map((m) => m.user_id);
+                    const { data: preferences } = await supabase
+                      .from('user_preferences')
+                      .select('user_id, prayer_notifications')
+                      .in('user_id', userIds);
 
-                  await Promise.all(notifications);
+                    // Send push notifications
+                    const notifications = otherMembers
+                      .filter((member) => {
+                        const userPrefs = preferences?.find((p) => p.user_id === member.user_id);
+                        return userPrefs?.prayer_notifications !== false;
+                      })
+                      .map((member) =>
+                        sendPushNotification(
+                          member.user_id,
+                          '🙏 Prayer Answered!',
+                          `"${prayer.title}" has been marked as answered. Praise God!`,
+                          {
+                            type: 'prayer',
+                            id: prayer.id,
+                          }
+                        )
+                      );
+
+                    await Promise.all(notifications);
+                  }
                 }
               }
-              fetchPrayers();
+            } catch (error) {
+              console.error('Error marking prayer as answered:', error);
             }
           },
         },
@@ -314,29 +256,17 @@ export const PrayerWallScreen: React.FC = () => {
       return;
     }
 
-    if (!currentGroup?.id || !session?.user?.id) return;
-
-    setCreating(true);
     try {
-      const { error } = await supabase
-        .from('prayers')
-        .insert({
-          group_id: currentGroup.id,
-          user_id: session.user.id,
-          title: newPrayerTitle.trim(),
-          content: newPrayerContent.trim() || null,
-        });
-
-      if (error) throw error;
+      await createPrayerMutation.mutateAsync({
+        title: newPrayerTitle.trim(),
+        content: newPrayerContent.trim() || undefined,
+      });
 
       setShowCreateModal(false);
       setNewPrayerTitle('');
       setNewPrayerContent('');
-      fetchPrayers();
     } catch (error: any) {
       Alert.alert('Error', error.message || 'Failed to create prayer request');
-    } finally {
-      setCreating(false);
     }
   };
 
@@ -363,28 +293,19 @@ export const PrayerWallScreen: React.FC = () => {
 
     if (!editingPrayer) return;
 
-    setUpdating(true);
     try {
-      const { error } = await supabase
-        .from('prayers')
-        .update({
-          title: editPrayerTitle.trim(),
-          content: editPrayerContent.trim() || null,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', editingPrayer.id);
-
-      if (error) throw error;
+      await updatePrayerMutation.mutateAsync({
+        prayerId: editingPrayer.id,
+        title: editPrayerTitle.trim(),
+        content: editPrayerContent.trim() || undefined,
+      });
 
       setShowEditModal(false);
       setEditingPrayer(null);
       setEditPrayerTitle('');
       setEditPrayerContent('');
-      fetchPrayers();
     } catch (error: any) {
       Alert.alert('Error', error.message || 'Failed to update prayer request');
-    } finally {
-      setUpdating(false);
     }
   };
 
@@ -392,7 +313,7 @@ export const PrayerWallScreen: React.FC = () => {
     if (!selectedPrayer) return;
 
     setShowMenuModal(false);
-    
+
     Alert.alert(
       'Delete Prayer',
       'Are you sure you want to delete this prayer request? This action cannot be undone.',
@@ -403,15 +324,7 @@ export const PrayerWallScreen: React.FC = () => {
           style: 'destructive',
           onPress: async () => {
             try {
-              // Delete the prayer
-              const { error } = await supabase
-                .from('prayers')
-                .delete()
-                .eq('id', selectedPrayer.id);
-
-              if (error) throw error;
-
-              fetchPrayers();
+              await deletePrayerMutation.mutateAsync(selectedPrayer.id);
             } catch (error: any) {
               Alert.alert('Error', error.message || 'Failed to delete prayer');
             }
@@ -494,13 +407,13 @@ export const PrayerWallScreen: React.FC = () => {
       </View>
 
       <FlashList
-        data={prayers}
+        data={prayersWithDetails}
         keyExtractor={(item) => item.id}
         renderItem={renderPrayerCard}
         estimatedItemSize={200}
         contentContainerStyle={styles.list}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+          <RefreshControl refreshing={isFetching} onRefresh={onRefresh} />
         }
         ListEmptyComponent={
           !loading ? (
@@ -568,7 +481,7 @@ export const PrayerWallScreen: React.FC = () => {
               <Button
                 title="Submit Prayer Request"
                 onPress={handleCreatePrayer}
-                loading={creating}
+                loading={createPrayerMutation.isPending}
                 fullWidth
               />
             </View>
@@ -619,7 +532,7 @@ export const PrayerWallScreen: React.FC = () => {
               <Button
                 title="Save Changes"
                 onPress={handleUpdatePrayer}
-                loading={updating}
+                loading={updatePrayerMutation.isPending}
                 fullWidth
               />
             </View>
