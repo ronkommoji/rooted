@@ -186,8 +186,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   text: {
-    fontSize: 32,
-    fontWeight: 'bold',
+    fontSize: 48,
+    fontWeight: '700',
+    fontFamily: 'PlayfairDisplay_700Bold', // Match app title font
     color: '#3D5A50',
     letterSpacing: 2,
   },

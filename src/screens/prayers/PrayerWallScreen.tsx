@@ -12,7 +12,7 @@ import {
   Dimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { FlashList } from '@shopify/flash-list';
+import { FlashList, FlashListRef } from '@shopify/flash-list';
 import { Ionicons } from '@expo/vector-icons';
 import { PIConfetti, PIConfettiMethods } from 'react-native-fast-confetti';
 import { useTheme } from '../../theme/ThemeContext';
@@ -46,6 +46,9 @@ export const PrayerWallScreen: React.FC = () => {
   
   // Refs to measure prayer card positions
   const prayerCardRefs = useRef<{ [key: string]: View | null }>({});
+  
+  // Ref for FlashList to enable scrolling
+  const listRef = useRef<FlashListRef<PrayerWithDetails>>(null);
   
   const [filter, setFilter] = useState<'Requests' | 'Answered'>('Requests');
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -410,6 +413,7 @@ export const PrayerWallScreen: React.FC = () => {
         data={prayersWithDetails}
         keyExtractor={(item) => item.id}
         renderItem={renderPrayerCard}
+        // @ts-expect-error - estimatedItemSize is valid but TypeScript definitions may be outdated
         estimatedItemSize={200}
         contentContainerStyle={styles.list}
         refreshControl={

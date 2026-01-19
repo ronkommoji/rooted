@@ -1,5 +1,7 @@
 // Daily Devotional API integration for fetching devotionals from devotional-api.vercel.app
 
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
 export interface DailyDevotionalResponse {
   title: string;
   date: string;
@@ -22,6 +24,10 @@ export interface DailyDevotionalResponse {
 
 const DEVOTIONAL_API_BASE_URL = 'https://devotional-api.vercel.app';
 
+// Cache keys for persistent storage
+const DEVOTIONAL_CACHE_KEY = '@rooted:daily_devotional';
+const DEVOTIONAL_CACHE_DATE_KEY = '@rooted:daily_devotional_date';
+
 // In-memory cache for today's devotional (same for all users)
 let cachedDevotional: DailyDevotionalResponse | null = null;
 let cachedDate: string | null = null;
@@ -36,14 +42,56 @@ const getTodayDateString = (): string => {
 };
 
 /**
- * Fetch today's devotional from the API with caching
+ * Load cached devotional from persistent storage
+ */
+const loadCachedDevotional = async (): Promise<DailyDevotionalResponse | null> => {
+  try {
+    const cachedDateStr = await AsyncStorage.getItem(DEVOTIONAL_CACHE_DATE_KEY);
+    const today = getTodayDateString();
+    
+    if (cachedDateStr === today) {
+      const cachedData = await AsyncStorage.getItem(DEVOTIONAL_CACHE_KEY);
+      if (cachedData) {
+        const parsed = JSON.parse(cachedData) as DailyDevotionalResponse;
+        // Also update in-memory cache
+        cachedDevotional = parsed;
+        cachedDate = today;
+        return parsed;
+      }
+    }
+  } catch (error) {
+    console.error('Error reading devotional cache:', error);
+  }
+  return null;
+};
+
+/**
+ * Save devotional to persistent storage
+ */
+const saveCachedDevotional = async (data: DailyDevotionalResponse, date: string): Promise<void> => {
+  try {
+    await AsyncStorage.setItem(DEVOTIONAL_CACHE_KEY, JSON.stringify(data));
+    await AsyncStorage.setItem(DEVOTIONAL_CACHE_DATE_KEY, date);
+  } catch (error) {
+    console.error('Error saving devotional cache:', error);
+  }
+};
+
+/**
+ * Fetch today's devotional from the API with caching (in-memory and persistent)
  */
 export const fetchTodayDevotional = async (): Promise<DailyDevotionalResponse | null> => {
   const today = getTodayDateString();
   
-  // Return cached data if it's for today
+  // Return in-memory cached data if it's for today
   if (cachedDevotional && cachedDate === today) {
     return cachedDevotional;
+  }
+  
+  // Try to load from persistent cache
+  const persistentCache = await loadCachedDevotional();
+  if (persistentCache) {
+    return persistentCache;
   }
   
   // If there's already a fetch in progress, return that promise
@@ -64,9 +112,12 @@ export const fetchTodayDevotional = async (): Promise<DailyDevotionalResponse | 
       
       const data: DailyDevotionalResponse = await response.json();
       
-      // Cache the result
+      // Cache the result in memory
       cachedDevotional = data;
       cachedDate = today;
+      
+      // Save to persistent storage
+      await saveCachedDevotional(data, today);
       
       return data;
     } catch (error) {

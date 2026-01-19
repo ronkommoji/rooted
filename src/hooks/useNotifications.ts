@@ -4,8 +4,13 @@ import { useAppStore } from '../store/useAppStore';
 import { supabase } from '../lib/supabase';
 import {
   requestNotificationPermissions,
+  scheduleDevotionalReminders,
   scheduleDevotionalReminder,
   cancelDevotionalReminders,
+  schedulePrayerReminder,
+  cancelPrayerReminders,
+  scheduleSmartNotifications,
+  cancelSmartNotifications,
   sendPrayerNotification,
   scheduleEventNotifications,
   cancelEventNotifications as cancelEventNotificationsLib,
@@ -81,7 +86,18 @@ export function useNotifications() {
     preferences?.devotional_reminders, 
     preferences?.devotional_reminder_hour,
     preferences?.devotional_reminder_minute,
-    preferences?.prayer_notifications, 
+    preferences?.devotional_reminder_count,
+    preferences?.devotional_reminder_time_1_hour,
+    preferences?.devotional_reminder_time_1_minute,
+    preferences?.devotional_reminder_time_2_hour,
+    preferences?.devotional_reminder_time_2_minute,
+    preferences?.devotional_reminder_time_3_hour,
+    preferences?.devotional_reminder_time_3_minute,
+    preferences?.prayer_notifications,
+    preferences?.prayer_reminder_enabled,
+    preferences?.prayer_reminder_hour,
+    preferences?.prayer_reminder_minute,
+    preferences?.smart_notifications_enabled,
     preferences?.event_alerts, 
     session
   ]);
@@ -126,16 +142,63 @@ export function useNotifications() {
   };
 
   const updateNotificationSettings = async () => {
-    if (!preferences) return;
+    if (!preferences || !session?.user?.id) return;
+
+    const { currentGroup } = useAppStore.getState();
 
     // Handle devotional reminders
     if (preferences.devotional_reminders) {
-      // Schedule daily reminder at user's preferred time (default 7 AM)
-      const hour = preferences.devotional_reminder_hour ?? 7;
-      const minute = preferences.devotional_reminder_minute ?? 0;
-      await scheduleDevotionalReminder(hour, minute);
+      const reminderCount = preferences.devotional_reminder_count ?? 1;
+      const reminderTimes: Array<{ hour: number; minute: number }> = [];
+
+      // Collect reminder times based on count
+      for (let i = 1; i <= Math.min(reminderCount, 3); i++) {
+        const hourKey = `devotional_reminder_time_${i}_hour` as keyof typeof preferences;
+        const minuteKey = `devotional_reminder_time_${i}_minute` as keyof typeof preferences;
+        
+        const hour = preferences[hourKey] as number | null | undefined;
+        const minute = preferences[minuteKey] as number | null | undefined;
+
+        // Use smart defaults if not set
+        if (hour !== null && hour !== undefined && minute !== null && minute !== undefined) {
+          reminderTimes.push({ hour, minute });
+        } else {
+          // Smart defaults: 7 AM, 12 PM, 6 PM
+          const defaultHours = [7, 12, 18];
+          const defaultMinutes = [0, 0, 0];
+          reminderTimes.push({
+            hour: defaultHours[i - 1] ?? 7,
+            minute: defaultMinutes[i - 1] ?? 0,
+          });
+        }
+      }
+
+      // If no times collected, fall back to legacy single reminder
+      if (reminderTimes.length === 0) {
+        const hour = preferences.devotional_reminder_hour ?? 7;
+        const minute = preferences.devotional_reminder_minute ?? 0;
+        await scheduleDevotionalReminder(hour, minute);
+      } else {
+        await scheduleDevotionalReminders(reminderTimes);
+      }
     } else {
       await cancelDevotionalReminders();
+    }
+
+    // Handle prayer reminders
+    if (preferences.prayer_reminder_enabled) {
+      const hour = preferences.prayer_reminder_hour ?? 20; // Default 8 PM
+      const minute = preferences.prayer_reminder_minute ?? 0;
+      await schedulePrayerReminder(hour, minute);
+    } else {
+      await cancelPrayerReminders();
+    }
+
+    // Handle smart notifications
+    if (preferences.smart_notifications_enabled && currentGroup?.id) {
+      await scheduleSmartNotifications(session.user.id, currentGroup.id);
+    } else {
+      await cancelSmartNotifications();
     }
 
     // Prayer and event notifications are sent on-demand

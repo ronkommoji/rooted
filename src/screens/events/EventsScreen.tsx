@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -12,7 +12,7 @@ import {
   ScrollView
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { FlashList } from '@shopify/flash-list';
+import { FlashList, FlashListRef } from '@shopify/flash-list';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../theme/ThemeContext';
 import { Header, PillToggle, Button, Input, EmptyState } from '../../components';
@@ -67,6 +67,9 @@ export const EventsScreen: React.FC = () => {
   const [expandedEventId, setExpandedEventId] = useState<string | null>(null);
   const [attendees, setAttendees] = useState<Record<string, Attendee[]>>({});
   const [loadingAttendees, setLoadingAttendees] = useState<Record<string, boolean>>({});
+  
+  // Ref for FlashList to enable scrolling
+  const listRef = useRef<FlashListRef<EventWithRsvps>>(null);
 
   const fetchEvents = useCallback(async () => {
     if (!currentGroup?.id || !session?.user?.id) return;
@@ -272,7 +275,11 @@ export const EventsScreen: React.FC = () => {
       }
 
       resetCreateModal();
-      fetchEvents();
+      await fetchEvents();
+      // Scroll to top after adding new event
+      setTimeout(() => {
+        listRef.current?.scrollToIndex({ index: 0, animated: true });
+      }, 200);
     } catch (error: any) {
       Alert.alert('Error', error.message || 'Failed to create event');
     } finally {
@@ -528,7 +535,11 @@ export const EventsScreen: React.FC = () => {
 
               if (error) throw error;
 
-              fetchEvents();
+              await fetchEvents();
+              // Scroll to top after deleting event
+              setTimeout(() => {
+                listRef.current?.scrollToIndex({ index: 0, animated: true });
+              }, 200);
             } catch (error: any) {
               Alert.alert('Error', error.message || 'Failed to delete event');
             }
@@ -577,9 +588,11 @@ export const EventsScreen: React.FC = () => {
       </View>
 
       <FlashList
+        ref={listRef}
         data={events}
         keyExtractor={(item) => item.id}
         renderItem={renderEventCard}
+        // @ts-expect-error - estimatedItemSize is valid but TypeScript definitions may be outdated
         estimatedItemSize={300}
         contentContainerStyle={styles.list}
         refreshControl={
