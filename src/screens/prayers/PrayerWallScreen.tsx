@@ -31,6 +31,7 @@ import {
   useIncrementPrayerCountMutation,
   type PrayerWithAuthor,
 } from '../../hooks/queries';
+import { usePrayersRealtime } from '../../hooks/useRealtimeSubscription';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -38,7 +39,10 @@ export const PrayerWallScreen: React.FC = () => {
   const { colors, isDark } = useTheme();
   const { currentGroup, profile, session } = useAppStore();
   const { sendPrayerNotification } = useNotifications();
-  
+
+  // Enable realtime subscriptions for prayers
+  usePrayersRealtime();
+
   // Confetti ref for triggering animation
   const confettiRef = useRef<PIConfettiMethods>(null);
   const [showConfetti, setShowConfetti] = useState(false);

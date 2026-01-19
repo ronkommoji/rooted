@@ -15,6 +15,7 @@ import { useTheme } from '../../theme/ThemeContext';
 import { Input, Button } from '../../components';
 import { useAuth } from '../../context/AuthContext';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { sanitizeInput, sanitizeEmail } from '../../lib/validation';
 
 type Props = {
   navigation: NativeStackNavigationProp<any>;
@@ -30,14 +31,18 @@ export const SignInScreen: React.FC<Props> = ({ navigation }) => {
   const [showPassword, setShowPassword] = useState(false);
 
   const handleSignIn = async () => {
-    if (!email || !password) {
+    // Sanitize inputs
+    const trimmedEmail = sanitizeEmail(email);
+    const trimmedPassword = sanitizeInput(password);
+
+    if (!trimmedEmail || !trimmedPassword) {
       Alert.alert('Error', 'Please fill in all fields');
       return;
     }
 
     setLoading(true);
     try {
-      await signIn(email, password);
+      await signIn(trimmedEmail, trimmedPassword);
     } catch (error: any) {
       // Handle rate limit errors with special messaging
       if (error.code === 'RATE_LIMIT_EXCEEDED') {

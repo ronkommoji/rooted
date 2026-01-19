@@ -15,6 +15,7 @@ import { useTheme } from '../../theme/ThemeContext';
 import { Input, Button } from '../../components';
 import { useAuth } from '../../context/AuthContext';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { validatePassword, validateEmail, validateFullName, sanitizeInput, sanitizeEmail } from '../../lib/validation';
 
 type Props = {
   navigation: NativeStackNavigationProp<any>;
@@ -32,24 +33,42 @@ export const SignUpScreen: React.FC<Props> = ({ navigation }) => {
   const [showPassword, setShowPassword] = useState(false);
 
   const handleSignUp = async () => {
-    if (!fullName || !email || !password || !confirmPassword) {
-      Alert.alert('Error', 'Please fill in all fields');
+    // Sanitize inputs
+    const trimmedFullName = sanitizeInput(fullName);
+    const trimmedEmail = sanitizeEmail(email);
+    const trimmedPassword = sanitizeInput(password);
+    const trimmedConfirmPassword = sanitizeInput(confirmPassword);
+
+    // Validate full name
+    const nameValidation = validateFullName(trimmedFullName);
+    if (!nameValidation.valid) {
+      Alert.alert('Error', nameValidation.error);
       return;
     }
 
-    if (password !== confirmPassword) {
+    // Validate email
+    const emailValidation = validateEmail(trimmedEmail);
+    if (!emailValidation.valid) {
+      Alert.alert('Error', emailValidation.error);
+      return;
+    }
+
+    // Validate password
+    const passwordValidation = validatePassword(trimmedPassword);
+    if (!passwordValidation.valid) {
+      Alert.alert('Error', passwordValidation.error);
+      return;
+    }
+
+    // Check password confirmation
+    if (trimmedPassword !== trimmedConfirmPassword) {
       Alert.alert('Error', 'Passwords do not match');
-      return;
-    }
-
-    if (password.length < 6) {
-      Alert.alert('Error', 'Password must be at least 6 characters');
       return;
     }
 
     setLoading(true);
     try {
-      await signUp(email, password, fullName);
+      await signUp(trimmedEmail, trimmedPassword, trimmedFullName);
       Alert.alert(
         'Success',
         'Account created! Please check your email to verify your account.',

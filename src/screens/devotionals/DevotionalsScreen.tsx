@@ -26,6 +26,7 @@ import {
   DailyDevotionalCard,
 } from './components';
 import { useDevotionals } from './hooks';
+import { useDevotionalsRealtime } from '../../hooks/useRealtimeSubscription';
 
 export const DevotionalsScreen: React.FC = () => {
   const { colors, isDark } = useTheme();
@@ -40,6 +41,9 @@ export const DevotionalsScreen: React.FC = () => {
   const [showStoryViewer, setShowStoryViewer] = useState(false);
   const [storyViewerStartMember, setStoryViewerStartMember] = useState('');
   const [uploading, setUploading] = useState(false);
+
+  // Enable realtime subscriptions for devotionals
+  useDevotionalsRealtime();
 
   // Use the devotionals hook
   const {

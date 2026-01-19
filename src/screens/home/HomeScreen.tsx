@@ -27,12 +27,18 @@ import {
   FABMenu,
   EventWithRsvpCount,
 } from './components';
+import { useDevotionalsRealtime, usePrayersRealtime, useEventsRealtime } from '../../hooks/useRealtimeSubscription';
 
 export const HomeScreen: React.FC = () => {
   const { colors, isDark } = useTheme();
   const navigation = useNavigation<any>();
   const { currentGroup, session } = useAppStore();
   const { scheduleEventNotifications } = useNotifications();
+
+  // Enable realtime subscriptions for all data on home screen
+  useDevotionalsRealtime();
+  usePrayersRealtime();
+  useEventsRealtime();
 
   const [weeklyChallenge, setWeeklyChallenge] = useState<WeeklyChallenge>(getCurrentWeekChallenge());
 

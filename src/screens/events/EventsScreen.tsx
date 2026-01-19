@@ -24,12 +24,16 @@ import { format, parseISO } from 'date-fns';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { useNotifications } from '../../hooks/useNotifications';
 import { sendPushNotification } from '../../lib/notifications';
+import { useEventsRealtime } from '../../hooks/useRealtimeSubscription';
 
 export const EventsScreen: React.FC = () => {
   const { colors, isDark } = useTheme();
   const { currentGroup, session } = useAppStore();
   const { scheduleEventNotifications, cancelEventNotifications } = useNotifications();
-  
+
+  // Enable realtime subscriptions for events
+  useEventsRealtime();
+
   const [filter, setFilter] = useState<'Upcoming' | 'Past'>('Upcoming');
   const [events, setEvents] = useState<EventWithRsvps[]>([]);
   const [refreshing, setRefreshing] = useState(false);
