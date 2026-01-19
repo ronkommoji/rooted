@@ -1,6 +1,7 @@
 // Daily Devotional API integration for fetching devotionals from devotional-api.vercel.app
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { AppState } from 'react-native';
 
 export interface DailyDevotionalResponse {
   title: string;
@@ -130,4 +131,29 @@ export const fetchTodayDevotional = async (): Promise<DailyDevotionalResponse | 
   })();
   
   return fetchPromise;
+};
+
+/**
+ * Clear the in-memory cache (useful when app backgrounds)
+ */
+export const clearDevotionalCache = (): void => {
+  cachedDevotional = null;
+  cachedDate = null;
+  fetchPromise = null;
+};
+
+/**
+ * Initialize app state listener to clear cache when app backgrounds
+ * Call this once at app startup
+ */
+export const initializeDevotionalCacheLifecycle = (): (() => void) => {
+  const subscription = AppState.addEventListener('change', (nextAppState) => {
+    if (nextAppState === 'background' || nextAppState === 'inactive') {
+      clearDevotionalCache();
+    }
+  });
+
+  return () => {
+    subscription.remove();
+  };
 };

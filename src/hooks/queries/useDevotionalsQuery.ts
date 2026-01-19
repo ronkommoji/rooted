@@ -172,28 +172,49 @@ export const useDailyCompletionsQuery = (date: Date) => {
         .in('user_id', completedUserIds)
         .or('content.ilike.%Daily Devotional%');
 
-      // For each user, check if they have a comment
+      // Batch fetch all comments for devotional entries (fixes N+1 query problem)
       const completionsMap = new Map();
-      for (const userId of completedUserIds) {
-        const entry = devotionalEntries?.find((e: any) => e.user_id === userId);
-        if (entry) {
-          const { data: comments } = await supabase
-            .from('devotional_comments')
-            .select('id, content')
-            .eq('devotional_id', entry.id)
-            .order('created_at', { ascending: false })
-            .limit(1);
 
-          if (comments && comments.length > 0) {
-            completionsMap.set(userId, {
-              hasComment: true,
-              commentText: comments[0].content,
-              commentId: comments[0].id,
-            });
+      if (devotionalEntries && devotionalEntries.length > 0) {
+        // Get all devotional IDs to fetch comments in one query
+        const devotionalIds = devotionalEntries.map((e: any) => e.id);
+
+        // Batch fetch all comments at once
+        const { data: allComments } = await supabase
+          .from('devotional_comments')
+          .select('id, content, devotional_id, created_at')
+          .in('devotional_id', devotionalIds)
+          .order('created_at', { ascending: false });
+
+        // Group comments by devotional_id and keep only the latest per devotional
+        const latestCommentByDevotional = new Map();
+        allComments?.forEach((comment: any) => {
+          if (!latestCommentByDevotional.has(comment.devotional_id)) {
+            latestCommentByDevotional.set(comment.devotional_id, comment);
+          }
+        });
+
+        // Build completions map
+        for (const userId of completedUserIds) {
+          const entry = devotionalEntries.find((e: any) => e.user_id === userId);
+          if (entry) {
+            const latestComment = latestCommentByDevotional.get(entry.id);
+            if (latestComment) {
+              completionsMap.set(userId, {
+                hasComment: true,
+                commentText: latestComment.content,
+                commentId: latestComment.id,
+              });
+            } else {
+              completionsMap.set(userId, { hasComment: false });
+            }
           } else {
             completionsMap.set(userId, { hasComment: false });
           }
-        } else {
+        }
+      } else {
+        // No devotional entries, mark all as no comment
+        for (const userId of completedUserIds) {
           completionsMap.set(userId, { hasComment: false });
         }
       }
