@@ -7,11 +7,112 @@ export type Json =
   | Json[]
 
 export type Database = {
+  // Allows to automatically instantiate createClient with right options
+  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
     PostgrestVersion: "14.1"
   }
   public: {
     Tables: {
+      bible_comments: {
+        Row: {
+          book: string
+          chapter: number
+          content: string
+          created_at: string | null
+          group_id: string
+          id: string
+          updated_at: string | null
+          user_id: string
+          verse: number
+        }
+        Insert: {
+          book: string
+          chapter: number
+          content: string
+          created_at?: string | null
+          group_id: string
+          id?: string
+          updated_at?: string | null
+          user_id: string
+          verse: number
+        }
+        Update: {
+          book?: string
+          chapter?: number
+          content?: string
+          created_at?: string | null
+          group_id?: string
+          id?: string
+          updated_at?: string | null
+          user_id?: string
+          verse?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bible_comments_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "groups"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bible_comments_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      celebrations: {
+        Row: {
+          celebration_type: string
+          created_at: string | null
+          group_id: string
+          id: string
+          post_date: string | null
+          related_id: string | null
+          shown_at: string | null
+          user_id: string
+        }
+        Insert: {
+          celebration_type: string
+          created_at?: string | null
+          group_id: string
+          id?: string
+          post_date?: string | null
+          related_id?: string | null
+          shown_at?: string | null
+          user_id: string
+        }
+        Update: {
+          celebration_type?: string
+          created_at?: string | null
+          group_id?: string
+          id?: string
+          post_date?: string | null
+          related_id?: string | null
+          shown_at?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "celebrations_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "groups"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "celebrations_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       challenges: {
         Row: {
           created_at: string | null
@@ -46,6 +147,57 @@ export type Database = {
             columns: ["group_id"]
             isOneToOne: false
             referencedRelation: "groups"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      daily_devotional_completions: {
+        Row: {
+          created_at: string | null
+          date: string
+          devotional_completed: boolean | null
+          group_id: string
+          id: string
+          prayer_completed: boolean | null
+          scripture_completed: boolean | null
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          date: string
+          devotional_completed?: boolean | null
+          group_id: string
+          id?: string
+          prayer_completed?: boolean | null
+          scripture_completed?: boolean | null
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          date?: string
+          devotional_completed?: boolean | null
+          group_id?: string
+          id?: string
+          prayer_completed?: boolean | null
+          scripture_completed?: boolean | null
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "daily_devotional_completions_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "groups"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "daily_devotional_completions_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
         ]
@@ -406,7 +558,7 @@ export type Database = {
           created_by?: string | null
           description?: string | null
           id?: string
-          invite_code?: string
+          invite_code: string
           name: string
           updated_at?: string | null
         }
@@ -476,6 +628,7 @@ export type Database = {
           group_id: string
           id: string
           is_answered: boolean | null
+          prayer_count: number
           title: string
           updated_at: string | null
           user_id: string
@@ -487,6 +640,7 @@ export type Database = {
           group_id: string
           id?: string
           is_answered?: boolean | null
+          prayer_count?: number
           title: string
           updated_at?: string | null
           user_id: string
@@ -498,6 +652,7 @@ export type Database = {
           group_id?: string
           id?: string
           is_answered?: boolean | null
+          prayer_count?: number
           title?: string
           updated_at?: string | null
           user_id?: string
@@ -546,39 +701,110 @@ export type Database = {
         }
         Relationships: []
       }
+      push_tokens: {
+        Row: {
+          created_at: string | null
+          device_id: string
+          id: string
+          platform: string
+          token: string
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          device_id?: string
+          id?: string
+          platform: string
+          token: string
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          device_id?: string
+          id?: string
+          platform?: string
+          token?: string
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "push_tokens_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       user_preferences: {
         Row: {
           created_at: string | null
-          devotional_reminders: boolean | null
+          devotional_reminder_count: number | null
           devotional_reminder_hour: number | null
           devotional_reminder_minute: number | null
+          devotional_reminder_time_1_hour: number | null
+          devotional_reminder_time_1_minute: number | null
+          devotional_reminder_time_2_hour: number | null
+          devotional_reminder_time_2_minute: number | null
+          devotional_reminder_time_3_hour: number | null
+          devotional_reminder_time_3_minute: number | null
+          devotional_reminders: boolean | null
           event_alerts: boolean | null
           id: string
           prayer_notifications: boolean | null
+          prayer_reminder_enabled: boolean | null
+          prayer_reminder_hour: number | null
+          prayer_reminder_minute: number | null
+          smart_notifications_enabled: boolean | null
           theme: string | null
           updated_at: string | null
           user_id: string
         }
         Insert: {
           created_at?: string | null
-          devotional_reminders?: boolean | null
+          devotional_reminder_count?: number | null
           devotional_reminder_hour?: number | null
           devotional_reminder_minute?: number | null
+          devotional_reminder_time_1_hour?: number | null
+          devotional_reminder_time_1_minute?: number | null
+          devotional_reminder_time_2_hour?: number | null
+          devotional_reminder_time_2_minute?: number | null
+          devotional_reminder_time_3_hour?: number | null
+          devotional_reminder_time_3_minute?: number | null
+          devotional_reminders?: boolean | null
           event_alerts?: boolean | null
           id?: string
           prayer_notifications?: boolean | null
+          prayer_reminder_enabled?: boolean | null
+          prayer_reminder_hour?: number | null
+          prayer_reminder_minute?: number | null
+          smart_notifications_enabled?: boolean | null
           theme?: string | null
           updated_at?: string | null
           user_id: string
         }
         Update: {
           created_at?: string | null
-          devotional_reminders?: boolean | null
+          devotional_reminder_count?: number | null
           devotional_reminder_hour?: number | null
           devotional_reminder_minute?: number | null
+          devotional_reminder_time_1_hour?: number | null
+          devotional_reminder_time_1_minute?: number | null
+          devotional_reminder_time_2_hour?: number | null
+          devotional_reminder_time_2_minute?: number | null
+          devotional_reminder_time_3_hour?: number | null
+          devotional_reminder_time_3_minute?: number | null
+          devotional_reminders?: boolean | null
           event_alerts?: boolean | null
           id?: string
           prayer_notifications?: boolean | null
+          prayer_reminder_enabled?: boolean | null
+          prayer_reminder_hour?: number | null
+          prayer_reminder_minute?: number | null
+          smart_notifications_enabled?: boolean | null
           theme?: string | null
           updated_at?: string | null
           user_id?: string
@@ -635,57 +861,6 @@ export type Database = {
           },
         ]
       }
-      daily_devotional_completions: {
-        Row: {
-          id: string
-          user_id: string
-          group_id: string
-          date: string
-          scripture_completed: boolean | null
-          devotional_completed: boolean | null
-          prayer_completed: boolean | null
-          created_at: string | null
-          updated_at: string | null
-        }
-        Insert: {
-          id?: string
-          user_id: string
-          group_id: string
-          date: string
-          scripture_completed?: boolean | null
-          devotional_completed?: boolean | null
-          prayer_completed?: boolean | null
-          created_at?: string | null
-          updated_at?: string | null
-        }
-        Update: {
-          id?: string
-          user_id?: string
-          group_id?: string
-          date?: string
-          scripture_completed?: boolean | null
-          devotional_completed?: boolean | null
-          prayer_completed?: boolean | null
-          created_at?: string | null
-          updated_at?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "daily_devotional_completions_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "daily_devotional_completions_group_id_fkey"
-            columns: ["group_id"]
-            isOneToOne: false
-            referencedRelation: "groups"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
     }
     Views: {
       [_ in never]: never
@@ -699,6 +874,13 @@ export type Database = {
           name: string
         }[]
       }
+      get_user_group_ids: { Args: never; Returns: string[] }
+      increment_prayer_count: {
+        Args: { prayer_id_param: string }
+        Returns: undefined
+      }
+      is_group_admin: { Args: { check_group_id: string }; Returns: boolean }
+      is_group_member: { Args: { check_group_id: string }; Returns: boolean }
     }
     Enums: {
       [_ in never]: never
@@ -709,24 +891,136 @@ export type Database = {
   }
 }
 
-// Convenience types
-export type Tables<T extends keyof Database['public']['Tables']> = Database['public']['Tables'][T]['Row'];
-export type Insertable<T extends keyof Database['public']['Tables']> = Database['public']['Tables'][T]['Insert'];
-export type Updatable<T extends keyof Database['public']['Tables']> = Database['public']['Tables'][T]['Update'];
+type DatabaseWithoutInternals = Omit<Database, "__InternalSupabase">
 
-// Exported row types
+type DefaultSchema = DatabaseWithoutInternals[Extract<keyof Database, "public">]
+
+export type Tables<
+  DefaultSchemaTableNameOrOptions extends
+    | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
+    | { schema: keyof DatabaseWithoutInternals },
+  TableName extends DefaultSchemaTableNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
+        DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
+    : never = never,
+> = DefaultSchemaTableNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
+      DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])[TableName] extends {
+      Row: infer R
+    }
+    ? R
+    : never
+  : DefaultSchemaTableNameOrOptions extends keyof (DefaultSchema["Tables"] &
+        DefaultSchema["Views"])
+    ? (DefaultSchema["Tables"] &
+        DefaultSchema["Views"])[DefaultSchemaTableNameOrOptions] extends {
+        Row: infer R
+      }
+      ? R
+      : never
+    : never
+
+export type TablesInsert<
+  DefaultSchemaTableNameOrOptions extends
+    | keyof DefaultSchema["Tables"]
+    | { schema: keyof DatabaseWithoutInternals },
+  TableName extends DefaultSchemaTableNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
+    : never = never,
+> = DefaultSchemaTableNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"][TableName] extends {
+      Insert: infer I
+    }
+    ? I
+    : never
+  : DefaultSchemaTableNameOrOptions extends keyof DefaultSchema["Tables"]
+    ? DefaultSchema["Tables"][DefaultSchemaTableNameOrOptions] extends {
+        Insert: infer I
+      }
+      ? I
+      : never
+    : never
+
+export type TablesUpdate<
+  DefaultSchemaTableNameOrOptions extends
+    | keyof DefaultSchema["Tables"]
+    | { schema: keyof DatabaseWithoutInternals },
+  TableName extends DefaultSchemaTableNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
+    : never = never,
+> = DefaultSchemaTableNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"][TableName] extends {
+      Update: infer U
+    }
+    ? U
+    : never
+  : DefaultSchemaTableNameOrOptions extends keyof DefaultSchema["Tables"]
+    ? DefaultSchema["Tables"][DefaultSchemaTableNameOrOptions] extends {
+        Update: infer U
+      }
+      ? U
+      : never
+    : never
+
+export type Enums<
+  DefaultSchemaEnumNameOrOptions extends
+    | keyof DefaultSchema["Enums"]
+    | { schema: keyof DatabaseWithoutInternals },
+  EnumName extends DefaultSchemaEnumNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
+    : never = never,
+> = DefaultSchemaEnumNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"][EnumName]
+  : DefaultSchemaEnumNameOrOptions extends keyof DefaultSchema["Enums"]
+    ? DefaultSchema["Enums"][DefaultSchemaEnumNameOrOptions]
+    : never
+
+export type CompositeTypes<
+  PublicCompositeTypeNameOrOptions extends
+    | keyof DefaultSchema["CompositeTypes"]
+    | { schema: keyof DatabaseWithoutInternals },
+  CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
+    : never = never,
+> = PublicCompositeTypeNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"][CompositeTypeName]
+  : PublicCompositeTypeNameOrOptions extends keyof DefaultSchema["CompositeTypes"]
+    ? DefaultSchema["CompositeTypes"][PublicCompositeTypeNameOrOptions]
+    : never
+
+export const Constants = {
+  public: {
+    Enums: {},
+  },
+} as const
+
+// Convenience types
 export type Profile = Tables<'profiles'>;
 export type Group = Tables<'groups'>;
 export type GroupMember = Tables<'group_members'>;
-export type Prayer = Tables<'prayers'>;
-export type PrayerInteraction = Tables<'prayer_interactions'>;
 export type Devotional = Tables<'devotionals'>;
-export type DevotionalLike = Tables<'devotional_likes'>;
-export type DevotionalComment = Tables<'devotional_comments'>;
-export type UserStreak = Tables<'user_streaks'>;
+export type Prayer = Tables<'prayers'>;
 export type Event = Tables<'events'>;
-export type EventPollOption = Tables<'event_poll_options'>;
-export type EventPollVote = Tables<'event_poll_votes'>;
 export type EventRsvp = Tables<'event_rsvps'>;
 export type UserPreferences = Tables<'user_preferences'>;
 export type Challenge = Tables<'challenges'>;

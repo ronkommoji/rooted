@@ -39,15 +39,36 @@ export const SettingsScreen: React.FC = () => {
   const [devotionalReminders, setDevotionalReminders] = useState(preferences?.devotional_reminders ?? true);
   const [eventAlerts, setEventAlerts] = useState(preferences?.event_alerts ?? true);
   
-  // Devotional reminder time
-  const reminderHour = preferences?.devotional_reminder_hour ?? 7;
-  const reminderMinute = preferences?.devotional_reminder_minute ?? 0;
-  const [reminderTime, setReminderTime] = useState(() => {
-    const date = new Date();
-    date.setHours(reminderHour, reminderMinute, 0, 0);
-    return date;
+  // Devotional reminder count and times
+  const [reminderCount, setReminderCount] = useState(preferences?.devotional_reminder_count ?? 1);
+  const [reminderTimes, setReminderTimes] = useState<Date[]>(() => {
+    const times: Date[] = [];
+    const defaultHours = [7, 12, 18]; // 7 AM, 12 PM, 6 PM
+    for (let i = 0; i < 3; i++) {
+      const hourKey = `devotional_reminder_time_${i + 1}_hour` as keyof typeof preferences;
+      const minuteKey = `devotional_reminder_time_${i + 1}_minute` as keyof typeof preferences;
+      const hour = (preferences?.[hourKey] as number | null | undefined) ?? defaultHours[i];
+      const minute = (preferences?.[minuteKey] as number | null | undefined) ?? 0;
+      const date = new Date();
+      date.setHours(hour, minute, 0, 0);
+      times.push(date);
+    }
+    return times;
   });
   const [showTimePicker, setShowTimePicker] = useState(false);
+  const [timePickerIndex, setTimePickerIndex] = useState(0);
+  
+  // Prayer reminder
+  const [prayerReminderEnabled, setPrayerReminderEnabled] = useState(preferences?.prayer_reminder_enabled ?? false);
+  const [prayerReminderTime, setPrayerReminderTime] = useState(() => {
+    const date = new Date();
+    date.setHours(preferences?.prayer_reminder_hour ?? 20, preferences?.prayer_reminder_minute ?? 0, 0, 0);
+    return date;
+  });
+  const [showPrayerTimePicker, setShowPrayerTimePicker] = useState(false);
+  
+  // Smart notifications
+  const [smartNotificationsEnabled, setSmartNotificationsEnabled] = useState(preferences?.smart_notifications_enabled ?? true);
   
   // Edit group name modal state
   const [showEditGroupModal, setShowEditGroupModal] = useState(false);
@@ -56,16 +77,43 @@ export const SettingsScreen: React.FC = () => {
   
   const isAdmin = currentUserRole === 'admin';
 
-  // Sync reminder time when preferences change
+  // Sync reminder times when preferences change
   useEffect(() => {
     if (preferences) {
-      const hour = preferences.devotional_reminder_hour ?? 7;
-      const minute = preferences.devotional_reminder_minute ?? 0;
-      const date = new Date();
-      date.setHours(hour, minute, 0, 0);
-      setReminderTime(date);
+      setReminderCount(preferences.devotional_reminder_count ?? 1);
+      setPrayerReminderEnabled(preferences.prayer_reminder_enabled ?? false);
+      setSmartNotificationsEnabled(preferences.smart_notifications_enabled ?? true);
+      
+      const defaultHours = [7, 12, 18];
+      const newTimes: Date[] = [];
+      for (let i = 0; i < 3; i++) {
+        const hourKey = `devotional_reminder_time_${i + 1}_hour` as keyof typeof preferences;
+        const minuteKey = `devotional_reminder_time_${i + 1}_minute` as keyof typeof preferences;
+        const hour = (preferences[hourKey] as number | null | undefined) ?? defaultHours[i];
+        const minute = (preferences[minuteKey] as number | null | undefined) ?? 0;
+        const date = new Date();
+        date.setHours(hour, minute, 0, 0);
+        newTimes.push(date);
+      }
+      setReminderTimes(newTimes);
+      
+      const prayerDate = new Date();
+      prayerDate.setHours(preferences.prayer_reminder_hour ?? 20, preferences.prayer_reminder_minute ?? 0, 0, 0);
+      setPrayerReminderTime(prayerDate);
     }
-  }, [preferences?.devotional_reminder_hour, preferences?.devotional_reminder_minute]);
+  }, [
+    preferences?.devotional_reminder_count,
+    preferences?.devotional_reminder_time_1_hour,
+    preferences?.devotional_reminder_time_1_minute,
+    preferences?.devotional_reminder_time_2_hour,
+    preferences?.devotional_reminder_time_2_minute,
+    preferences?.devotional_reminder_time_3_hour,
+    preferences?.devotional_reminder_time_3_minute,
+    preferences?.prayer_reminder_enabled,
+    preferences?.prayer_reminder_hour,
+    preferences?.prayer_reminder_minute,
+    preferences?.smart_notifications_enabled,
+  ]);
 
   const handleTogglePrayerNotifications = async (value: boolean) => {
     setPrayerNotifications(value);
@@ -77,18 +125,51 @@ export const SettingsScreen: React.FC = () => {
     await updatePreferences({ devotional_reminders: value });
   };
 
+  const handleReminderCountChange = async (count: number) => {
+    setReminderCount(count);
+    await updatePreferences({ devotional_reminder_count: count });
+  };
+
   const handleReminderTimeChange = async (event: any, selectedDate?: Date) => {
     if (Platform.OS === 'android') {
       setShowTimePicker(false);
     }
     
+    if (selectedDate && timePickerIndex >= 0) {
+      const newTimes = [...reminderTimes];
+      newTimes[timePickerIndex] = selectedDate;
+      setReminderTimes(newTimes);
+      
+      const updates: any = {};
+      updates[`devotional_reminder_time_${timePickerIndex + 1}_hour`] = selectedDate.getHours();
+      updates[`devotional_reminder_time_${timePickerIndex + 1}_minute`] = selectedDate.getMinutes();
+      
+      await updatePreferences(updates);
+    }
+  };
+
+  const handlePrayerReminderTimeChange = async (event: any, selectedDate?: Date) => {
+    if (Platform.OS === 'android') {
+      setShowPrayerTimePicker(false);
+    }
+    
     if (selectedDate) {
-      setReminderTime(selectedDate);
+      setPrayerReminderTime(selectedDate);
       await updatePreferences({
-        devotional_reminder_hour: selectedDate.getHours(),
-        devotional_reminder_minute: selectedDate.getMinutes(),
+        prayer_reminder_hour: selectedDate.getHours(),
+        prayer_reminder_minute: selectedDate.getMinutes(),
       });
     }
+  };
+
+  const handleTogglePrayerReminder = async (value: boolean) => {
+    setPrayerReminderEnabled(value);
+    await updatePreferences({ prayer_reminder_enabled: value });
+  };
+
+  const handleToggleSmartNotifications = async (value: boolean) => {
+    setSmartNotificationsEnabled(value);
+    await updatePreferences({ smart_notifications_enabled: value });
   };
 
   const handleToggleEventAlerts = async (value: boolean) => {
@@ -321,22 +402,88 @@ export const SettingsScreen: React.FC = () => {
             {devotionalReminders && (
               <>
                 <View style={[styles.divider, { backgroundColor: colors.cardBorder }]} />
-                <TouchableOpacity 
+                <View style={styles.settingRow}>
+                  <Text style={[styles.settingLabel, { color: colors.text }]}>
+                    Number of Reminders
+                  </Text>
+                  <View style={styles.countSelector}>
+                    {[1, 2, 3].map((count) => (
+                      <TouchableOpacity
+                        key={count}
+                        style={[
+                          styles.countButton,
+                          reminderCount === count && { backgroundColor: isDark ? '#3D5A50' : colors.primary },
+                          reminderCount !== count && { backgroundColor: colors.cardBorder },
+                        ]}
+                        onPress={() => handleReminderCountChange(count)}
+                      >
+                        <Text
+                          style={[
+                            styles.countButtonText,
+                            { color: reminderCount === count ? '#FFFFFF' : colors.text },
+                          ]}
+                        >
+                          {count}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                </View>
+                {[1, 2, 3].slice(0, reminderCount).map((index) => (
+                  <React.Fragment key={index}>
+                    <View style={[styles.divider, { backgroundColor: colors.cardBorder }]} />
+                    <TouchableOpacity
+                      style={styles.settingRow}
+                      onPress={() => {
+                        setTimePickerIndex(index - 1);
+                        setShowTimePicker(true);
+                      }}
+                    >
+                      <Text style={[styles.settingLabel, { color: colors.text }]}>
+                        Reminder {index} Time
+                      </Text>
+                      <View style={styles.settingRight}>
+                        <Text style={[styles.settingValue, { color: colors.textSecondary }]}>
+                          {format(reminderTimes[index - 1], 'h:mm a')}
+                        </Text>
+                        <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
+                      </View>
+                    </TouchableOpacity>
+                  </React.Fragment>
+                ))}
+              </>
+            )}
+            <View style={[styles.divider, { backgroundColor: colors.cardBorder }]} />
+            <SettingToggle 
+              label="Prayer Reminders" 
+              value={prayerReminderEnabled}
+              onValueChange={handleTogglePrayerReminder}
+            />
+            {prayerReminderEnabled && (
+              <>
+                <View style={[styles.divider, { backgroundColor: colors.cardBorder }]} />
+                <TouchableOpacity
                   style={styles.settingRow}
-                  onPress={() => setShowTimePicker(true)}
+                  onPress={() => setShowPrayerTimePicker(true)}
                 >
                   <Text style={[styles.settingLabel, { color: colors.text }]}>
-                    Reminder Time
+                    Prayer Reminder Time
                   </Text>
                   <View style={styles.settingRight}>
                     <Text style={[styles.settingValue, { color: colors.textSecondary }]}>
-                      {format(reminderTime, 'h:mm a')}
+                      {format(prayerReminderTime, 'h:mm a')}
                     </Text>
                     <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
                   </View>
                 </TouchableOpacity>
               </>
             )}
+            <View style={[styles.divider, { backgroundColor: colors.cardBorder }]} />
+            <SettingToggle 
+              label="Smart Notifications" 
+              value={smartNotificationsEnabled}
+              onValueChange={handleToggleSmartNotifications}
+            />
             <View style={[styles.divider, { backgroundColor: colors.cardBorder }]} />
             <SettingToggle 
               label="Event Alerts" 
@@ -441,7 +588,7 @@ export const SettingsScreen: React.FC = () => {
         </SafeAreaView>
       </Modal>
 
-      {/* Time Picker Modal */}
+      {/* Devotional Reminder Time Picker Modal */}
       {showTimePicker && (
         <Modal
           visible={showTimePicker}
@@ -453,7 +600,7 @@ export const SettingsScreen: React.FC = () => {
             <View style={[styles.timePickerContainer, { backgroundColor: colors.card }]}>
               <View style={[styles.timePickerHeader, { borderBottomColor: colors.cardBorder }]}>
                 <Text style={[styles.timePickerTitle, { color: colors.text }]}>
-                  Set Reminder Time
+                  Set Reminder {timePickerIndex + 1} Time
                 </Text>
                 <TouchableOpacity onPress={() => setShowTimePicker(false)}>
                   <Ionicons name="close" size={24} color={colors.text} />
@@ -461,7 +608,7 @@ export const SettingsScreen: React.FC = () => {
               </View>
               
               <DateTimePicker
-                value={reminderTime}
+                value={reminderTimes[timePickerIndex]}
                 mode="time"
                 display={Platform.OS === 'ios' ? 'spinner' : 'default'}
                 onChange={handleReminderTimeChange}
@@ -474,6 +621,48 @@ export const SettingsScreen: React.FC = () => {
                   <Button
                     title="Done"
                     onPress={() => setShowTimePicker(false)}
+                    fullWidth
+                  />
+                </View>
+              )}
+            </View>
+          </View>
+        </Modal>
+      )}
+
+      {/* Prayer Reminder Time Picker Modal */}
+      {showPrayerTimePicker && (
+        <Modal
+          visible={showPrayerTimePicker}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setShowPrayerTimePicker(false)}
+        >
+          <View style={styles.timePickerOverlay}>
+            <View style={[styles.timePickerContainer, { backgroundColor: colors.card }]}>
+              <View style={[styles.timePickerHeader, { borderBottomColor: colors.cardBorder }]}>
+                <Text style={[styles.timePickerTitle, { color: colors.text }]}>
+                  Set Prayer Reminder Time
+                </Text>
+                <TouchableOpacity onPress={() => setShowPrayerTimePicker(false)}>
+                  <Ionicons name="close" size={24} color={colors.text} />
+                </TouchableOpacity>
+              </View>
+              
+              <DateTimePicker
+                value={prayerReminderTime}
+                mode="time"
+                display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                onChange={handlePrayerReminderTimeChange}
+                textColor={colors.text}
+                themeVariant={isDark ? 'dark' : 'light'}
+              />
+
+              {Platform.OS === 'ios' && (
+                <View style={[styles.timePickerFooter, { borderTopColor: colors.cardBorder }]}>
+                  <Button
+                    title="Done"
+                    onPress={() => setShowPrayerTimePicker(false)}
                     fullWidth
                   />
                 </View>
@@ -644,6 +833,31 @@ const styles = StyleSheet.create({
   timePickerFooter: {
     padding: 16,
     borderTopWidth: 1,
+  },
+  countSelector: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  countButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  countButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  smartNotificationInfo: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginTop: 0,
+  },
+  smartNotificationText: {
+    fontSize: 13,
+    lineHeight: 18,
+    flex: 1,
   },
 });
 

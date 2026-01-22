@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback, useRef } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -6,6 +6,7 @@ import {
   ScrollView,
   RefreshControl,
   TouchableOpacity,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
@@ -13,12 +14,11 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../theme/ThemeContext';
 import { Card, Avatar, Header, ChallengeCard, ChallengeDetailModal } from '../../components';
 import { useAppStore } from '../../store/useAppStore';
-import { supabase } from '../../lib/supabase';
-import { Prayer, Profile } from '../../types/database';
 import { getCurrentWeekChallenge, WeeklyChallenge } from '../../data/weeklyChallenge';
 import { StoryViewerModal, AddDevotionalSheet, DailyDevotionalCard } from '../devotionals/components';
 import { useDevotionals } from '../devotionals/hooks';
 import { useNotifications } from '../../hooks/useNotifications';
+import { useRecentPrayersQuery, useRecentEventsQuery, useEventRsvpsQuery } from '../../hooks/queries';
 import {
   DevotionalSection,
   EventListSection,
@@ -27,30 +27,27 @@ import {
   FABMenu,
   EventWithRsvpCount,
 } from './components';
-
-type PrayerWithProfile = Prayer & { profiles: Profile };
+import { useDevotionalsRealtime, usePrayersRealtime, useEventsRealtime } from '../../hooks/useRealtimeSubscription';
 
 export const HomeScreen: React.FC = () => {
   const { colors, isDark } = useTheme();
   const navigation = useNavigation<any>();
   const { currentGroup, session } = useAppStore();
   const { scheduleEventNotifications } = useNotifications();
-  
-  const [refreshing, setRefreshing] = useState(false);
+
+  // Enable realtime subscriptions for all data on home screen
+  useDevotionalsRealtime();
+  usePrayersRealtime();
+  useEventsRealtime();
+
   const [weeklyChallenge, setWeeklyChallenge] = useState<WeeklyChallenge>(getCurrentWeekChallenge());
-  const [recentPrayers, setRecentPrayers] = useState<PrayerWithProfile[]>([]);
-  const [upcomingEvents, setUpcomingEvents] = useState<EventWithRsvpCount[]>([]);
-  
-  // Track when data was last fetched to avoid unnecessary refreshes
-  const lastFetchTime = useRef<number>(0);
-  const CACHE_DURATION_MS = 5 * 60 * 1000; // 5 minutes - refresh if data is older than this
-  
+
   // Story/Devotional state
   const [showStoryViewer, setShowStoryViewer] = useState(false);
   const [storyViewerStartMember, setStoryViewerStartMember] = useState('');
   const [showAddDevotional, setShowAddDevotional] = useState(false);
   const [uploading, setUploading] = useState(false);
-  
+
   // Challenge modal state
   const [showChallengeModal, setShowChallengeModal] = useState(false);
 
@@ -71,96 +68,37 @@ export const HomeScreen: React.FC = () => {
 
   const currentUserId = session?.user?.id || '';
 
-  const fetchData = useCallback(async (forceRefresh = false) => {
-    if (!currentGroup?.id) return;
+  // React Query hooks for prayers and events
+  const {
+    data: recentPrayers = [],
+    isLoading: loadingPrayers,
+    refetch: refetchPrayers,
+  } = useRecentPrayersQuery(3);
 
-    // Check if we need to refresh (data is stale or forced)
-    const now = Date.now();
-    const shouldRefresh = forceRefresh || (now - lastFetchTime.current > CACHE_DURATION_MS);
-    
-    if (!shouldRefresh && lastFetchTime.current > 0) {
-      // Data is still fresh, skip fetch
-      return;
-    }
+  const {
+    data: upcomingEvents = [],
+    isLoading: loadingEvents,
+    refetch: refetchEvents,
+  } = useRecentEventsQuery(2);
 
-    // Fetch recent prayers
-    const { data: prayersData } = await supabase
-      .from('prayers')
-      .select('*, profiles(*)')
-      .eq('group_id', currentGroup.id)
-      .eq('is_answered', false)
-      .order('created_at', { ascending: false })
-      .limit(3);
-
-    if (prayersData) {
-      setRecentPrayers(prayersData as PrayerWithProfile[]);
-    }
-
-    // Fetch upcoming events
-    const nowISO = new Date().toISOString();
-    const { data: eventsData } = await supabase
-      .from('events')
-      .select('*')
-      .eq('group_id', currentGroup.id)
-      .gte('event_date', nowISO)
-      .order('event_date', { ascending: true })
-      .limit(2);
-
-    if (eventsData) {
-      // Get RSVP counts for each event
-      const eventsWithCounts = await Promise.all(
-        eventsData.map(async (event) => {
-          const { count } = await supabase
-            .from('event_rsvps')
-            .select('*', { count: 'exact', head: true })
-            .eq('event_id', event.id)
-            .eq('status', 'yes');
-          
-          return {
-            ...event,
-            rsvp_count: count || 0,
-          } as EventWithRsvpCount;
-        })
-      );
-      setUpcomingEvents(eventsWithCounts);
-    }
-
-    // Update last fetch time
-    lastFetchTime.current = now;
-  }, [currentGroup?.id]);
-
+  // Update challenge on mount
   useEffect(() => {
-    // Initial load - always fetch
-    fetchData(true);
-    // Update challenge (in case week changed)
     setWeeklyChallenge(getCurrentWeekChallenge());
-  }, [fetchData]);
+  }, []);
 
+  // Combined refresh for pull-to-refresh
   const onRefresh = async () => {
-    setRefreshing(true);
     setWeeklyChallenge(getCurrentWeekChallenge());
-    // Force refresh all data
-    await Promise.all([fetchData(true), refreshDevotionals()]);
-    setRefreshing(false);
+    // Refetch all data in parallel
+    await Promise.all([
+      refetchPrayers(),
+      refetchEvents(),
+      refreshDevotionals(),
+    ]);
   };
 
-  // Smart refresh when screen comes into focus
-  // Only refresh if data is stale, otherwise show cached data immediately
-  useFocusEffect(
-    React.useCallback(() => {
-      const now = Date.now();
-      const isStale = now - lastFetchTime.current > CACHE_DURATION_MS;
-      
-      // Only refresh if data is stale or never fetched
-      if (isStale || lastFetchTime.current === 0) {
-        // Background refresh - don't block UI
-        fetchData(true);
-      }
-      
-      // Don't force refresh devotionals - they have their own caching
-      // They will only refresh if their cache is stale
-    }, [fetchData])
-  );
+  // Compute combined loading state
+  const isRefreshing = loadingPrayers || loadingEvents;
 
   const timeAgo = (date: string) => {
     const now = new Date();
@@ -200,12 +138,12 @@ export const HomeScreen: React.FC = () => {
   };
 
   const handlePrayerCreated = () => {
-    fetchData();
+    refetchPrayers();
     navigation.navigate('Prayers');
   };
 
   const handleEventCreated = () => {
-    fetchData();
+    refetchEvents();
     navigation.navigate('Events');
   };
 
@@ -217,7 +155,7 @@ export const HomeScreen: React.FC = () => {
         style={styles.scrollView}
         contentContainerStyle={styles.content}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+          <RefreshControl refreshing={isRefreshing} onRefresh={onRefresh} />
         }
         showsVerticalScrollIndicator={false}
       >
