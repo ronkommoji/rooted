@@ -5,4 +5,4 @@ export { SubmissionCard } from './SubmissionCard';
 export { AddDevotionalSheet } from './AddDevotionalSheet';
 export { StoryViewerModal } from './StoryViewerModal';
 export { CommentsModal, type Comment } from './CommentsModal';
-export { DailyDevotionalCard } from "./DailyDevotionalCard";
+export { DailyDevotionalCard } from './DailyDevotionalCard';
