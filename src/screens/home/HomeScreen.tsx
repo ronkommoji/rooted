@@ -308,7 +308,7 @@ const styles = StyleSheet.create({
   content: {
     paddingHorizontal: 16,
     paddingTop: 0,
-    paddingBottom: 20,
+    paddingBottom: 100,
   },
   section: {
     marginBottom: 12,

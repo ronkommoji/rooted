@@ -60,15 +60,15 @@ export const FABMenu: React.FC<FABMenuProps> = ({
 
     // Animate menu buttons with staggered delay
     const buttonAnimations = [
-      { translateY: button1TranslateY, opacity: button1Opacity, delay: 0 },
-      { translateY: button2TranslateY, opacity: button2Opacity, delay: 50 },
-      { translateY: button3TranslateY, opacity: button3Opacity, delay: 100 },
+      { translateY: button1TranslateY, opacity: button1Opacity, delay: 0, distance: 216 },
+      { translateY: button2TranslateY, opacity: button2Opacity, delay: 50, distance: 156 },
+      { translateY: button3TranslateY, opacity: button3Opacity, delay: 100, distance: 96 },
     ];
 
-    buttonAnimations.forEach(({ translateY, opacity, delay }) => {
+    buttonAnimations.forEach(({ translateY, opacity, delay, distance }) => {
       Animated.parallel([
         Animated.timing(translateY, {
-          toValue: toValue ? -70 : 0,
+          toValue: toValue ? -distance : 0,
           duration: 300,
           delay: delay,
           useNativeDriver: true,
@@ -152,7 +152,10 @@ export const FABMenu: React.FC<FABMenuProps> = ({
             activeOpacity={0.7}
           >
             <Ionicons name="heart" size={20} color={colors.primary} />
-            <Text style={[styles.fabMenuButtonLabel, { color: colors.text }]}>
+            <Text 
+              style={[styles.fabMenuButtonLabel, { color: colors.text }]}
+              numberOfLines={1}
+            >
               Prayer
             </Text>
           </TouchableOpacity>
@@ -176,7 +179,10 @@ export const FABMenu: React.FC<FABMenuProps> = ({
             activeOpacity={0.7}
           >
             <Ionicons name="calendar" size={20} color={colors.primary} />
-            <Text style={[styles.fabMenuButtonLabel, { color: colors.text }]}>
+            <Text 
+              style={[styles.fabMenuButtonLabel, { color: colors.text }]}
+              numberOfLines={1}
+            >
               Event
             </Text>
           </TouchableOpacity>
@@ -200,7 +206,10 @@ export const FABMenu: React.FC<FABMenuProps> = ({
             activeOpacity={0.7}
           >
             <Ionicons name="library" size={20} color={colors.primary} />
-            <Text style={[styles.fabMenuButtonLabel, { color: colors.text }]}>
+            <Text 
+              style={[styles.fabMenuButtonLabel, { color: colors.text }]}
+              numberOfLines={1}
+            >
               Devotional
             </Text>
           </TouchableOpacity>
@@ -213,7 +222,11 @@ export const FABMenu: React.FC<FABMenuProps> = ({
           activeOpacity={0.8}
         >
           <Animated.View style={{ transform: [{ rotate: rotation }] }}>
-            <Ionicons name="add" size={28} color="#FFFFFF" />
+            <Ionicons 
+              name="add" 
+              size={28} 
+              color="#FFFFFF" 
+            />
           </Animated.View>
         </TouchableOpacity>
       </View>
@@ -245,13 +258,13 @@ const styles = StyleSheet.create({
     bottom: 0,
   },
   fabMenuButton1: {
-    bottom: 160,
+    bottom: 0,
   },
   fabMenuButton2: {
-    bottom: 110,
+    bottom: 0,
   },
   fabMenuButton3: {
-    bottom: 60,
+    bottom: 0,
   },
   fabMenuButtonInner: {
     flexDirection: 'row',
@@ -265,9 +278,11 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 4,
     gap: 8,
+    minWidth: 120,
   },
   fabMenuButtonLabel: {
     fontSize: 14,
     fontWeight: '600',
+    flexShrink: 0,
   },
 });
