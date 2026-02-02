@@ -7,6 +7,7 @@ import { MemberSubmission } from '../components/StoryRow';
 import { fetchTodayDevotional } from '../../../lib/devotionalApi';
 import { validateImage, generateUniqueFilename } from '../../../lib/fileValidation';
 import { logger } from '../../../lib/logger';
+import { subscribeDailyDevotionalCompletion } from '../../../lib/dailyDevotionalEvents';
 
 // Cache duration: 2 minutes for devotionals data
 const DEVOTIONALS_CACHE_DURATION_MS = 2 * 60 * 1000;
@@ -248,6 +249,19 @@ export const useDevotionals = (selectedDate: Date): UseDevotionalsReturn => {
     fetchDevotionals(false);
   }, [fetchDevotionals, selectedDateISO]);
 
+  useEffect(() => {
+    if (!currentGroup?.id) return;
+    const unsubscribe = subscribeDailyDevotionalCompletion((event) => {
+      if (event.groupId !== currentGroup.id) return;
+      if (event.date !== selectedDateISO) return;
+      if (!event.allCompleted) return;
+      fetchDailyCompletions();
+      fetchDevotionals(true);
+    });
+
+    return unsubscribe;
+  }, [currentGroup?.id, selectedDateISO, fetchDevotionals, fetchDailyCompletions]);
+
   // Store daily devotional completions with comments
   // Map structure: userId -> { hasComment: boolean, commentText?: string, commentId?: string }
   const [dailyCompletions, setDailyCompletions] = useState<Map<string, { hasComment: boolean; commentText?: string; commentId?: string }>>(new Map());
@@ -256,86 +270,86 @@ export const useDevotionals = (selectedDate: Date): UseDevotionalsReturn => {
   const [dailyCompletionUserIds, setDailyCompletionUserIds] = useState<Set<string>>(new Set());
 
   // Fetch daily devotional completions and comments
-  useEffect(() => {
-    const fetchDailyCompletions = async () => {
-      if (!currentGroup?.id || !selectedDateISO) {
+  const fetchDailyCompletions = useCallback(async () => {
+    if (!currentGroup?.id || !selectedDateISO) {
+      setDailyCompletions(new Map());
+      setDailyCompletionUserIds(new Set());
+      return;
+    }
+
+    try {
+      // Fetch daily devotional completions
+      const { data: completions } = await supabase
+        .from('daily_devotional_completions')
+        .select('user_id, scripture_completed, devotional_completed, prayer_completed')
+        .eq('group_id', currentGroup.id)
+        .eq('date', selectedDateISO);
+
+      if (!completions || completions.length === 0) {
         setDailyCompletions(new Map());
         setDailyCompletionUserIds(new Set());
         return;
       }
 
-      try {
-        // Fetch daily devotional completions
-        const { data: completions } = await supabase
-          .from('daily_devotional_completions')
-          .select('user_id, scripture_completed, devotional_completed, prayer_completed')
-          .eq('group_id', currentGroup.id)
-          .eq('date', selectedDateISO);
+      // Get all users who completed daily devotional (all 3 items)
+      const completedUserIds = completions
+        .filter((c: any) => c.scripture_completed && c.devotional_completed && c.prayer_completed)
+        .map((c: any) => c.user_id);
 
-        if (!completions || completions.length === 0) {
-          setDailyCompletions(new Map());
-          setDailyCompletionUserIds(new Set());
-          return;
-        }
+      setDailyCompletionUserIds(new Set(completedUserIds));
 
-        // Get all users who completed daily devotional (all 3 items)
-        const completedUserIds = completions
-          .filter((c: any) => c.scripture_completed && c.devotional_completed && c.prayer_completed)
-          .map((c: any) => c.user_id);
+      if (completedUserIds.length === 0) {
+        setDailyCompletions(new Map());
+        return;
+      }
 
-        setDailyCompletionUserIds(new Set(completedUserIds));
+      // Find devotional entries that might have comments (created by DevotionalDetailScreen)
+      const { data: devotionalEntries } = await supabase
+        .from('devotionals')
+        .select('id, user_id, content')
+        .eq('group_id', currentGroup.id)
+        .eq('post_date', selectedDateISO)
+        .in('user_id', completedUserIds)
+        .or('content.ilike.%Daily Devotional%');
 
-        if (completedUserIds.length === 0) {
-          setDailyCompletions(new Map());
-          return;
-        }
+      // For each user, check if they have a comment
+      const completionsMap = new Map();
+      for (const userId of completedUserIds) {
+        const entry = devotionalEntries?.find((e: any) => e.user_id === userId);
+        if (entry) {
+          // Check for comments
+          const { data: comments } = await supabase
+            .from('devotional_comments')
+            .select('id, content')
+            .eq('devotional_id', entry.id)
+            .order('created_at', { ascending: false })
+            .limit(1);
 
-        // Find devotional entries that might have comments (created by DevotionalDetailScreen)
-        const { data: devotionalEntries } = await supabase
-          .from('devotionals')
-          .select('id, user_id, content')
-          .eq('group_id', currentGroup.id)
-          .eq('post_date', selectedDateISO)
-          .in('user_id', completedUserIds)
-          .or('content.ilike.%Daily Devotional%');
-
-        // For each user, check if they have a comment
-        const completionsMap = new Map();
-        for (const userId of completedUserIds) {
-          const entry = devotionalEntries?.find((e: any) => e.user_id === userId);
-          if (entry) {
-            // Check for comments
-            const { data: comments } = await supabase
-              .from('devotional_comments')
-              .select('id, content')
-              .eq('devotional_id', entry.id)
-              .order('created_at', { ascending: false })
-              .limit(1);
-
-            if (comments && comments.length > 0) {
-              completionsMap.set(userId, {
-                hasComment: true,
-                commentText: comments[0].content,
-                commentId: comments[0].id,
-              });
-            } else {
-              completionsMap.set(userId, { hasComment: false });
-            }
+          if (comments && comments.length > 0) {
+            completionsMap.set(userId, {
+              hasComment: true,
+              commentText: comments[0].content,
+              commentId: comments[0].id,
+            });
           } else {
             completionsMap.set(userId, { hasComment: false });
           }
+        } else {
+          completionsMap.set(userId, { hasComment: false });
         }
-
-        setDailyCompletions(completionsMap);
-      } catch (error) {
-        console.error('Error fetching daily completions:', error);
-        setDailyCompletions(new Map());
-        setDailyCompletionUserIds(new Set());
       }
-    };
 
-    fetchDailyCompletions();
+      setDailyCompletions(completionsMap);
+    } catch (error) {
+      console.error('Error fetching daily completions:', error);
+      setDailyCompletions(new Map());
+      setDailyCompletionUserIds(new Set());
+    }
   }, [currentGroup?.id, selectedDateISO]);
+
+  useEffect(() => {
+    fetchDailyCompletions();
+  }, [fetchDailyCompletions]);
 
   // Build member submissions
   const memberSubmissions: MemberSubmission[] = useMemo(() => {
@@ -390,9 +404,12 @@ export const useDevotionals = (selectedDate: Date): UseDevotionalsReturn => {
   // Refresh handler
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    await fetchDevotionals(true); // Force refresh
+    await Promise.all([
+      fetchDevotionals(true), // Force refresh
+      fetchDailyCompletions(),
+    ]);
     setRefreshing(false);
-  }, [fetchDevotionals]);
+  }, [fetchDevotionals, fetchDailyCompletions]);
 
   // Upload image to Supabase Storage
   const uploadImage = useCallback(async (imageUri: string): Promise<string | null> => {

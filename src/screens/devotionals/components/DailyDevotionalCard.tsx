@@ -1,7 +1,8 @@
-import React, { useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator } from 'react-native';
-import { useNavigation, useFocusEffect } from '@react-navigation/native';
+import React, { useEffect, useRef } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, Animated } from 'react-native';
+import { useNavigation, useIsFocused } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
+import * as Haptics from 'expo-haptics';
 import { format, parseISO } from 'date-fns';
 import { useTheme } from '../../../theme/ThemeContext';
 import { Card } from '../../../components';
@@ -20,10 +21,66 @@ export const DailyDevotionalCard: React.FC<DailyDevotionalCardProps> = ({
 }) => {
   const { colors, isDark } = useTheme();
   const navigation = useNavigation<any>();
+  const isFocused = useIsFocused();
   const { devotional, completion, loading, refresh } = useDailyDevotional();
 
   // Note: Removed useFocusEffect that was forcing refresh on every focus
   // The hook now has built-in caching, so data will only refresh when needed
+
+  const scriptureCompleted = completion?.scripture_completed || false;
+  const devotionalCompleted = completion?.devotional_completed || false;
+  const prayerCompleted = completion?.prayer_completed || false;
+
+  const scriptureAnim = useRef(new Animated.Value(scriptureCompleted ? 1 : 0)).current;
+  const devotionalAnim = useRef(new Animated.Value(devotionalCompleted ? 1 : 0)).current;
+  const prayerAnim = useRef(new Animated.Value(prayerCompleted ? 1 : 0)).current;
+  const previousCompletion = useRef({
+    scripture: scriptureCompleted,
+    devotional: devotionalCompleted,
+    prayer: prayerCompleted,
+  });
+
+  useEffect(() => {
+    if (!isFocused) {
+      return;
+    }
+    const animateCheckmark = (
+      anim: Animated.Value,
+      isCompleted: boolean,
+      wasCompleted: boolean
+    ) => {
+      if (isCompleted && !wasCompleted) {
+        anim.setValue(0);
+        Animated.spring(anim, {
+          toValue: 1,
+          friction: 5,
+          tension: 140,
+          useNativeDriver: true,
+        }).start();
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      } else if (!isCompleted) {
+        anim.setValue(0);
+      }
+    };
+
+    animateCheckmark(scriptureAnim, scriptureCompleted, previousCompletion.current.scripture);
+    animateCheckmark(devotionalAnim, devotionalCompleted, previousCompletion.current.devotional);
+    animateCheckmark(prayerAnim, prayerCompleted, previousCompletion.current.prayer);
+
+    previousCompletion.current = {
+      scripture: scriptureCompleted,
+      devotional: devotionalCompleted,
+      prayer: prayerCompleted,
+    };
+  }, [
+    scriptureCompleted,
+    devotionalCompleted,
+    prayerCompleted,
+    scriptureAnim,
+    devotionalAnim,
+    prayerAnim,
+    isFocused,
+  ]);
 
   // Show skeleton/placeholder while loading to reserve space
   // This ensures the component is part of the page layout from the start
@@ -91,10 +148,6 @@ export const DailyDevotionalCard: React.FC<DailyDevotionalCardProps> = ({
     }
   };
 
-  const scriptureCompleted = completion?.scripture_completed || false;
-  const devotionalCompleted = completion?.devotional_completed || false;
-  const prayerCompleted = completion?.prayer_completed || false;
-
   return (
     <Card style={styles.card}>
       {/* Header */}
@@ -135,7 +188,14 @@ export const DailyDevotionalCard: React.FC<DailyDevotionalCardProps> = ({
           </View>
           <View style={styles.itemRight}>
             {scriptureCompleted ? (
-              <Ionicons name="checkmark-circle" size={24} color="#4CAF50" />
+              <Animated.View
+                style={{
+                  transform: [{ scale: scriptureAnim }],
+                  opacity: scriptureAnim,
+                }}
+              >
+                <Ionicons name="checkmark-circle" size={24} color="#4CAF50" />
+              </Animated.View>
             ) : (
               <Text style={[styles.itemTime, { color: colors.textSecondary }]}>
                 1 min
@@ -163,7 +223,14 @@ export const DailyDevotionalCard: React.FC<DailyDevotionalCardProps> = ({
           </View>
           <View style={styles.itemRight}>
             {devotionalCompleted ? (
-              <Ionicons name="checkmark-circle" size={24} color="#4CAF50" />
+              <Animated.View
+                style={{
+                  transform: [{ scale: devotionalAnim }],
+                  opacity: devotionalAnim,
+                }}
+              >
+                <Ionicons name="checkmark-circle" size={24} color="#4CAF50" />
+              </Animated.View>
             ) : (
               <Text style={[styles.itemTime, { color: colors.textSecondary }]}>
                 3 min
@@ -191,7 +258,14 @@ export const DailyDevotionalCard: React.FC<DailyDevotionalCardProps> = ({
           </View>
           <View style={styles.itemRight}>
             {prayerCompleted ? (
-              <Ionicons name="checkmark-circle" size={24} color="#4CAF50" />
+              <Animated.View
+                style={{
+                  transform: [{ scale: prayerAnim }],
+                  opacity: prayerAnim,
+                }}
+              >
+                <Ionicons name="checkmark-circle" size={24} color="#4CAF50" />
+              </Animated.View>
             ) : (
               <Text style={[styles.itemTime, { color: colors.textSecondary }]}>
                 2 min

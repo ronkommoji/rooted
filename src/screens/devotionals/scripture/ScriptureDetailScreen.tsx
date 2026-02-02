@@ -22,7 +22,7 @@ import { useAppStore } from '../../../store/useAppStore';
 
 export const ScriptureDetailScreen: React.FC = () => {
   const { colors, isDark } = useTheme();
-  const navigation = useNavigation();
+  const navigation = useNavigation<any>();
   const { devotional, markScriptureComplete, loading: devotionalLoading } = useDailyDevotional();
   const { currentGroup } = useAppStore();
 
