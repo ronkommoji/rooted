@@ -11,6 +11,7 @@ export const queryKeys = {
     all: ['profile'] as const,
     byId: (userId: string) => [...queryKeys.profile.all, userId] as const,
     current: () => [...queryKeys.profile.all, 'current'] as const,
+    detail: (userId: string) => [...queryKeys.profile.all, 'detail', userId] as const,
   },
 
   // User preferences

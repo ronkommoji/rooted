@@ -20,6 +20,7 @@ import { format } from 'date-fns';
 import { useTheme } from '../../theme/ThemeContext';
 import { Card, Avatar, Button, Input } from '../../components';
 import { useAppStore } from '../../store/useAppStore';
+import { supabase } from '../../lib/supabase';
 
 export const SettingsScreen: React.FC = () => {
   const { colors, isDark, toggleTheme } = useTheme();
@@ -29,10 +30,12 @@ export const SettingsScreen: React.FC = () => {
     currentGroup, 
     currentUserRole,
     preferences, 
+    session,
     updatePreferences, 
     updateGroupName,
     leaveGroup,
-    signOut 
+    signOut,
+    fetchProfile
   } = useAppStore();
   
   const [prayerNotifications, setPrayerNotifications] = useState(preferences?.prayer_notifications ?? true);
@@ -74,6 +77,11 @@ export const SettingsScreen: React.FC = () => {
   const [showEditGroupModal, setShowEditGroupModal] = useState(false);
   const [editGroupName, setEditGroupName] = useState('');
   const [savingGroupName, setSavingGroupName] = useState(false);
+  
+  // Edit profile name modal state
+  const [showEditNameModal, setShowEditNameModal] = useState(false);
+  const [editFullName, setEditFullName] = useState('');
+  const [savingFullName, setSavingFullName] = useState(false);
   
   const isAdmin = currentUserRole === 'admin';
 
@@ -197,6 +205,38 @@ export const SettingsScreen: React.FC = () => {
       Alert.alert('Error', error.message || 'Failed to update group name');
     } finally {
       setSavingGroupName(false);
+    }
+  };
+
+  const handleEditName = () => {
+    setEditFullName(profile?.full_name || '');
+    setShowEditNameModal(true);
+  };
+
+  const handleSaveFullName = async () => {
+    if (!editFullName.trim()) {
+      Alert.alert('Error', 'Please enter your name');
+      return;
+    }
+
+    setSavingFullName(true);
+    try {
+      const { error } = await supabase
+        .from('profiles')
+        .update({ full_name: editFullName.trim() })
+        .eq('id', session?.user?.id || '');
+
+      if (error) throw error;
+
+      setShowEditNameModal(false);
+      Alert.alert('Success', 'Name updated!');
+      
+      // Refresh profile data in store
+      await fetchProfile();
+    } catch (error: any) {
+      Alert.alert('Error', error.message || 'Failed to update name');
+    } finally {
+      setSavingFullName(false);
     }
   };
 
@@ -328,19 +368,25 @@ export const SettingsScreen: React.FC = () => {
 
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.content}>
         {/* Profile Section */}
-        <Card style={styles.profileCard}>
-          <View style={styles.profileContent}>
-            <Avatar name={profile?.full_name} size={60} />
-            <View style={styles.profileInfo}>
-              <Text style={[styles.profileName, { color: colors.text }]}>
-                {profile?.full_name || 'User'}
-              </Text>
-              <Text style={[styles.profileEmail, { color: colors.textSecondary }]}>
-                {profile?.email}
-              </Text>
+        <TouchableOpacity 
+          onPress={handleEditName}
+          activeOpacity={0.7}
+        >
+          <Card style={styles.profileCard}>
+            <View style={styles.profileContent}>
+              <Avatar name={profile?.full_name} size={60} />
+              <View style={styles.profileInfo}>
+                <Text style={[styles.profileName, { color: colors.text }]}>
+                  {profile?.full_name || 'User'}
+                </Text>
+                <Text style={[styles.profileEmail, { color: colors.textSecondary }]}>
+                  {profile?.email}
+                </Text>
+              </View>
+              <Ionicons name="pencil" size={20} color={isDark ? '#3D5A50' : colors.primary} />
             </View>
-          </View>
-        </Card>
+          </Card>
+        </TouchableOpacity>
 
         {/* Group Section */}
         <View style={styles.section}>
@@ -580,6 +626,48 @@ export const SettingsScreen: React.FC = () => {
                 title="Save Changes"
                 onPress={handleSaveGroupName}
                 loading={savingGroupName}
+                fullWidth
+                style={{ marginTop: 16 }}
+              />
+            </View>
+          </KeyboardAvoidingView>
+        </SafeAreaView>
+      </Modal>
+
+      {/* Edit Full Name Modal */}
+      <Modal
+        visible={showEditNameModal}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setShowEditNameModal(false)}
+      >
+        <SafeAreaView style={[styles.modalContainer, { backgroundColor: colors.background }]}>
+          <KeyboardAvoidingView 
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            style={styles.modalContent}
+          >
+            <View style={[styles.modalHeader, { borderBottomColor: colors.cardBorder }]}>
+              <TouchableOpacity onPress={() => setShowEditNameModal(false)}>
+                <Text style={[styles.cancelText, { color: colors.textSecondary }]}>Cancel</Text>
+              </TouchableOpacity>
+              <Text style={[styles.modalTitle, { color: colors.text }]}>Edit Name</Text>
+              <View style={{ width: 50 }} />
+            </View>
+
+            <View style={styles.modalForm}>
+              <Input
+                label="Full Name"
+                placeholder="Enter your full name"
+                value={editFullName}
+                onChangeText={setEditFullName}
+                autoCapitalize="words"
+                autoFocus
+              />
+
+              <Button
+                title="Save Changes"
+                onPress={handleSaveFullName}
+                loading={savingFullName}
                 fullWidth
                 style={{ marginTop: 16 }}
               />

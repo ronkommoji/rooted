@@ -263,14 +263,25 @@ export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({
 
           {/* Header */}
           <View style={styles.header}>
-            <View style={styles.userInfo}>
+            <TouchableOpacity
+              style={styles.userInfo}
+              onPress={() => {
+                onClose();
+                setTimeout(() => {
+                  navigation.navigate('Profile', { userId: currentStory.memberId });
+                }, 300);
+              }}
+              activeOpacity={0.7}
+              accessibilityRole="button"
+              accessibilityLabel={`View ${currentStory.memberName}'s profile`}
+            >
               <View style={styles.avatar}>
                 <Text style={styles.avatarText}>
                   {getInitials(currentStory.memberName)}
                 </Text>
               </View>
               <Text style={styles.userName}>{currentStory.memberName}</Text>
-            </View>
+            </TouchableOpacity>
 
             <TouchableOpacity onPress={handleClose} style={styles.closeButton}>
               <Ionicons name="close" size={28} color="#FFFFFF" />

@@ -21,11 +21,13 @@ export const Header: React.FC<HeaderProps> = ({
   rightElement,
 }) => {
   const { colors } = useTheme();
-  const { profile, currentGroup } = useAppStore();
+  const { profile, currentGroup, session } = useAppStore();
   const navigation = useNavigation<any>();
 
-  const openSettings = () => {
-    navigation.navigate('Settings');
+  const openProfile = () => {
+    if (session?.user?.id) {
+      navigation.navigate('Profile', { userId: session.user.id });
+    }
   };
 
   // Determine what to show as the main title
@@ -53,7 +55,7 @@ export const Header: React.FC<HeaderProps> = ({
                 name={profile?.full_name} 
                 imageUrl={profile?.avatar_url}
                 size={40}
-                onPress={openSettings}
+                onPress={openProfile}
               />
             )
           )}

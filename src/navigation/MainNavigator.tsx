@@ -10,6 +10,9 @@ import { BibleScreen } from '../screens/bible/BibleScreen';
 import { DevotionalsScreen } from '../screens/devotionals/DevotionalsScreen';
 import { EventsScreen } from '../screens/events/EventsScreen';
 import { SettingsScreen } from '../screens/settings/SettingsScreen';
+import { ProfileScreen } from '../screens/profile/ProfileScreen';
+import { UserDevotionalsListScreen } from '../screens/profile/UserDevotionalsList';
+import { UserPrayersListScreen } from '../screens/profile/UserPrayersList';
 import { ChapterViewScreen } from '../screens/bible/ChapterViewScreen';
 import { ScriptureDetailScreen } from '../screens/devotionals/scripture/ScriptureDetailScreen';
 import { DevotionalDetailScreen } from '../screens/devotionals/devotional/DevotionalDetailScreen';
@@ -26,6 +29,9 @@ export type MainTabParamList = {
 export type MainStackParamList = {
   MainTabs: undefined;
   Settings: undefined;
+  Profile: { userId: string };
+  UserDevotionalsList: { userId: string; userName: string; initialDevotionalId?: string };
+  UserPrayersList: { userId: string; userName: string };
   ChapterView: { book: string; chapter: number };
   ScriptureDetail: undefined;
   DevotionalDetail: undefined;
@@ -162,6 +168,27 @@ export const MainNavigator: React.FC = () => {
         component={SettingsScreen}
         options={{
           presentation: 'modal',
+        }}
+      />
+      <Stack.Screen 
+        name="Profile" 
+        component={ProfileScreen}
+        options={{
+          presentation: 'card',
+        }}
+      />
+      <Stack.Screen 
+        name="UserDevotionalsList" 
+        component={UserDevotionalsListScreen}
+        options={{
+          presentation: 'card',
+        }}
+      />
+      <Stack.Screen 
+        name="UserPrayersList" 
+        component={UserPrayersListScreen}
+        options={{
+          presentation: 'card',
         }}
       />
       <Stack.Screen 

@@ -11,6 +11,7 @@ import {
   Dimensions,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useNavigation } from '@react-navigation/native';
 import { useTheme } from '../../../theme/ThemeContext';
 import { MemberSubmission } from './StoryRow';
 import { CommentsModal, Comment } from './CommentsModal';
@@ -42,6 +43,7 @@ export const SubmissionCard: React.FC<SubmissionCardProps> = React.memo(({
   isLiked = false,
 }) => {
   const { colors, isDark } = useTheme();
+  const navigation = useNavigation<any>();
   const [showMenu, setShowMenu] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [imageAspectRatio, setImageAspectRatio] = useState<number>(1);
@@ -180,7 +182,13 @@ export const SubmissionCard: React.FC<SubmissionCardProps> = React.memo(({
     <View style={[styles.container, { backgroundColor: colors.card }]}>
       {/* Header */}
       <View style={styles.header}>
-        <View style={styles.headerLeft}>
+        <TouchableOpacity
+          style={styles.headerLeft}
+          onPress={() => navigation.navigate('Profile', { userId: submission.memberId })}
+          activeOpacity={0.7}
+          accessibilityRole="button"
+          accessibilityLabel={`View ${submission.memberName}'s profile`}
+        >
           <View
             style={[
               styles.avatar,
@@ -194,7 +202,7 @@ export const SubmissionCard: React.FC<SubmissionCardProps> = React.memo(({
           <Text style={[styles.memberName, { color: colors.text }]}>
             {submission.memberName}
           </Text>
-        </View>
+        </TouchableOpacity>
 
         {isOwnPost && (
           <TouchableOpacity
