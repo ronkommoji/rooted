@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -7,6 +7,7 @@ import {
   RefreshControl,
   TouchableOpacity,
   Alert,
+  Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
@@ -17,8 +18,12 @@ import { useAppStore } from '../../store/useAppStore';
 import { getCurrentWeekChallenge, WeeklyChallenge } from '../../data/weeklyChallenge';
 import { StoryViewerModal, AddDevotionalSheet, DailyDevotionalCard } from '../devotionals/components';
 import { useDevotionals } from '../devotionals/hooks';
+import { requestDailyDevotionalRefresh } from '../devotionals/hooks/useDailyDevotional';
 import { useNotifications } from '../../hooks/useNotifications';
 import { useRecentPrayersQuery, useRecentEventsQuery, useEventRsvpsQuery } from '../../hooks/queries';
+import { useQueryClient } from '@tanstack/react-query';
+import { queryKeys } from '../../lib/queryKeys';
+import { fetchUserProfile } from '../../lib/profileApi';
 import {
   DevotionalSection,
   EventListSection,
@@ -32,8 +37,9 @@ import { useDevotionalsRealtime, usePrayersRealtime, useEventsRealtime } from '.
 export const HomeScreen: React.FC = () => {
   const { colors, isDark } = useTheme();
   const navigation = useNavigation<any>();
-  const { currentGroup, session } = useAppStore();
+  const { currentGroup, session, fetchProfile, fetchGroupMembers } = useAppStore();
   const { scheduleEventNotifications } = useNotifications();
+  const [refreshing, setRefreshing] = useState(false);
 
   // Enable realtime subscriptions for all data on home screen
   useDevotionalsRealtime();
@@ -59,7 +65,10 @@ export const HomeScreen: React.FC = () => {
   const today = new Date();
   const {
     memberSubmissions,
+    storySlides,
     currentUserHasPosted,
+    currentUserCompletedDaily,
+    loading: loadingDevotionals,
     onRefresh: refreshDevotionals,
     addDevotional,
     addDailyDevotional,
@@ -67,6 +76,8 @@ export const HomeScreen: React.FC = () => {
   } = useDevotionals(today);
 
   const currentUserId = session?.user?.id || '';
+  const queryClient = useQueryClient();
+  const profilePrefetchStarted = useRef(false);
 
   // React Query hooks for prayers and events
   const {
@@ -86,19 +97,64 @@ export const HomeScreen: React.FC = () => {
     setWeeklyChallenge(getCurrentWeekChallenge());
   }, []);
 
-  // Combined refresh for pull-to-refresh
-  const onRefresh = async () => {
-    setWeeklyChallenge(getCurrentWeekChallenge());
-    // Refetch all data in parallel
-    await Promise.all([
-      refetchPrayers(),
-      refetchEvents(),
-      refreshDevotionals(),
-    ]);
-  };
+  // Prefetch current user's profile in background after first screen has rendered and its queries have run.
+  // Delay so Home's devotionals, prayers, events load first; then profile + images load as last step.
+  useEffect(() => {
+    if (!currentUserId || !currentGroup?.id || profilePrefetchStarted.current) return;
 
-  // Compute combined loading state
-  const isRefreshing = loadingPrayers || loadingEvents;
+    const delayMs = 3000; // 3s after Home mounts so Home's own queries run first
+    const timeoutId = setTimeout(() => {
+      profilePrefetchStarted.current = true;
+      const key = queryKeys.profile.detail(currentUserId);
+      const queryFn = () =>
+        fetchUserProfile(currentUserId, currentGroup!.id, currentUserId);
+
+      queryClient
+        .fetchQuery({
+          queryKey: key,
+          queryFn,
+          staleTime: 5 * 60 * 1000,
+          gcTime: 15 * 60 * 1000,
+        })
+        .then((data) => {
+          // Prefetch profile devotional images so they're cached when user opens Profile
+          if (data?.devotionals?.length) {
+            data.devotionals.forEach((d) => {
+              if (d.image_url?.trim()) {
+                Image.prefetch(d.image_url).catch(() => {});
+              }
+            });
+          }
+        })
+        .catch(() => {});
+    }, delayMs);
+
+    return () => clearTimeout(timeoutId);
+  }, [currentUserId, currentGroup?.id, queryClient]);
+
+  // Combined refresh for pull-to-refresh: profile, group members, devotionals, daily devotional, prayers, events
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    setWeeklyChallenge(getCurrentWeekChallenge());
+
+    try {
+      await Promise.all([
+        refetchPrayers(),
+        refetchEvents(),
+        refreshDevotionals(),
+        requestDailyDevotionalRefresh(),
+        fetchProfile(),
+        currentGroup?.id ? fetchGroupMembers() : Promise.resolve(),
+      ]);
+      // Invalidate React Query caches so profile/group data stays in sync everywhere
+      queryClient.invalidateQueries({ queryKey: queryKeys.profile.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.groups.all });
+    } finally {
+      setRefreshing(false);
+    }
+  }, [currentGroup?.id, fetchProfile, fetchGroupMembers, queryClient, refetchPrayers, refetchEvents, refreshDevotionals]);
+
+  const isRefreshing = refreshing || loadingPrayers || loadingEvents || loadingDevotionals;
 
   const timeAgo = (date: string) => {
     const now = new Date();
@@ -175,6 +231,7 @@ export const HomeScreen: React.FC = () => {
           onMemberPress={handleMemberStoryPress}
           onAddPress={() => setShowAddDevotional(true)}
           onSeeAllPress={() => navigation.navigate('Devotionals')}
+          loading={loadingDevotionals}
         />
 
         {/* Daily Devotional */}
@@ -210,8 +267,10 @@ export const HomeScreen: React.FC = () => {
               >
                 <View style={styles.prayerHeader}>
                   <Avatar 
-                    name={prayer.profiles.full_name} 
-                    size={32} 
+                    name={prayer.profiles.full_name}
+                    imageUrl={prayer.profiles.avatar_url}
+                    size={32}
+                    backgroundColor={colors.primary}
                   />
                   <View style={styles.prayerInfo}>
                     <Text style={[styles.prayerTitle, { color: colors.text }]} numberOfLines={1}>
@@ -238,7 +297,7 @@ export const HomeScreen: React.FC = () => {
       {/* Story Viewer Modal */}
       <StoryViewerModal
         visible={showStoryViewer}
-        stories={memberSubmissions}
+        storySlides={storySlides}
         initialMemberId={storyViewerStartMember}
         onClose={() => setShowStoryViewer(false)}
       />
@@ -251,14 +310,13 @@ export const HomeScreen: React.FC = () => {
         onDailyDevotionalComplete={async () => {
           try {
             await addDailyDevotional();
-            setShowAddDevotional(false);
-            // Navigate to Devotionals page
-            navigation.navigate('Devotionals');
+            // Don't close the sheet - let user optionally add photo or click "I'm Done"
           } catch (error: any) {
             Alert.alert('Error', error.message || 'Failed to complete daily devotional');
           }
         }}
         uploading={uploading}
+        hasCompletedInAppForDate={currentUserCompletedDaily}
       />
 
       {/* Challenge Detail Modal */}

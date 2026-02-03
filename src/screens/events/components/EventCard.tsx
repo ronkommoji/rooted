@@ -175,6 +175,7 @@ export const EventCard = React.memo<EventCardProps>(
                     name={attendee.full_name}
                     imageUrl={attendee.avatar_url}
                     size={32}
+                    backgroundColor={colors.primary}
                   />
                   <Text style={[styles.attendeeName, { color: colors.text }]}>
                     {attendee.full_name}

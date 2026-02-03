@@ -117,7 +117,12 @@ export const PrayerCard = React.memo<PrayerCardProps>(
 
           {/* Header */}
           <View style={styles.header}>
-            <Avatar name={prayer.profiles.full_name} size={40} />
+            <Avatar 
+              name={prayer.profiles.full_name} 
+              imageUrl={prayer.profiles.avatar_url}
+              size={40}
+              backgroundColor={colors.primary}
+            />
 
             <View style={styles.info}>
               <Text style={[styles.title, { color: colors.text }]} numberOfLines={2}>

@@ -1,11 +1,17 @@
 import React, { useEffect, useRef } from 'react';
-import { View, StyleSheet, Animated, Text } from 'react-native';
+import { View, StyleSheet, Animated, Dimensions } from 'react-native';
 import Svg, { Circle } from 'react-native-svg';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 
 interface GrowthAnimationProps {
   onComplete?: () => void;
 }
+
+const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
+// Calculate scale needed to fill entire screen from 240px diameter circle
+const CIRCLE_DIAMETER = 240;
+const SCREEN_DIAGONAL = Math.sqrt(SCREEN_WIDTH ** 2 + SCREEN_HEIGHT ** 2);
+const FULL_SCREEN_SCALE = (SCREEN_DIAGONAL / CIRCLE_DIAMETER) * 1.2; // 1.2 for extra coverage
 
 export const GrowthAnimation: React.FC<GrowthAnimationProps> = ({ onComplete }) => {
   // Animation values
@@ -14,10 +20,6 @@ export const GrowthAnimation: React.FC<GrowthAnimationProps> = ({ onComplete }) 
   const plantTranslateY = useRef(new Animated.Value(50)).current; // Start below, grow upward
   const plantRotate = useRef(new Animated.Value(-20)).current; // Start more rotated (closed), unfurl to 0
   const plantOpacity = useRef(new Animated.Value(0)).current;
-  const textOpacity = useRef(new Animated.Value(0)).current;
-  const textTranslateY = useRef(new Animated.Value(20)).current; // Start slightly below, move up
-  const textScale = useRef(new Animated.Value(0.8)).current; // Start slightly smaller
-  const fadeOut = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
     // Sequence of animations
@@ -56,35 +58,21 @@ export const GrowthAnimation: React.FC<GrowthAnimationProps> = ({ onComplete }) 
           useNativeDriver: true,
         }),
       ]),
-      // 4. Text appears (400ms)
+      // 3. Hold for a moment (600ms)
+      Animated.delay(600),
+      // 4. Circle expands to fill screen while plant fades out (600ms)
       Animated.parallel([
-        Animated.spring(textOpacity, {
-          toValue: 1,
-          tension: 100,
-          friction: 8,
+        Animated.timing(circleScale, {
+          toValue: FULL_SCREEN_SCALE,
+          duration: 600,
           useNativeDriver: true,
         }),
-        Animated.spring(textTranslateY, {
+        Animated.timing(plantOpacity, {
           toValue: 0,
-          tension: 100,
-          friction: 8,
-          useNativeDriver: true,
-        }),
-        Animated.spring(textScale, {
-          toValue: 1,
-          tension: 100,
-          friction: 8,
+          duration: 600,
           useNativeDriver: true,
         }),
       ]),
-      // 5. Hold for a moment (500ms)
-      Animated.delay(500),
-      // 6. Fade out (400ms)
-      Animated.timing(fadeOut, {
-        toValue: 0,
-        duration: 400,
-        useNativeDriver: true,
-      }),
     ]).start(() => {
       onComplete?.();
     });
@@ -98,56 +86,38 @@ export const GrowthAnimation: React.FC<GrowthAnimationProps> = ({ onComplete }) 
 
   return (
     <View style={styles.container}>
-      <Animated.View style={{ opacity: fadeOut }}>
-        <View style={styles.content}>
-          {/* Background Circle */}
-          <Animated.View
-            style={[
-              styles.circleWrapper,
-              {
-                transform: [{ scale: circleScale }],
-              },
-            ]}
-          >
-            <Svg width={300} height={300} viewBox="0 0 300 300">
-              <Circle cx="150" cy="150" r="120" fill="#3D5A50" />
-            </Svg>
-          </Animated.View>
-
-          {/* Sprout Icon - Animated */}
-          <Animated.View
-            style={[
-              styles.iconContainer,
-              {
-                opacity: plantOpacity,
-                transform: [
-                  { translateY: plantTranslateY },
-                  { scale: plantScale },
-                  { rotate: plantRotation },
-                ],
-              },
-            ]}
-          >
-            <MaterialCommunityIcons name="sprout" size={120} color="#FFFFFF" />
-          </Animated.View>
-        </View>
-
-        {/* Rooted Text - Animated */}
+      <View style={styles.content}>
+        {/* Background Circle - Expands to fill screen */}
         <Animated.View
           style={[
-            styles.textContainer,
+            styles.circleWrapper,
             {
-              opacity: textOpacity,
+              transform: [{ scale: circleScale }],
+            },
+          ]}
+        >
+          <Svg width={300} height={300} viewBox="0 0 300 300">
+            <Circle cx="150" cy="150" r="120" fill="#3D5A50" />
+          </Svg>
+        </Animated.View>
+
+        {/* Sprout Icon - Animated */}
+        <Animated.View
+          style={[
+            styles.iconContainer,
+            {
+              opacity: plantOpacity,
               transform: [
-                { translateY: textTranslateY },
-                { scale: textScale },
+                { translateY: plantTranslateY },
+                { scale: plantScale },
+                { rotate: plantRotation },
               ],
             },
           ]}
         >
-          <Text style={styles.text}>Rooted</Text>
+          <MaterialCommunityIcons name="sprout" size={120} color="#FFFFFF" />
         </Animated.View>
-      </Animated.View>
+      </View>
     </View>
   );
 };
@@ -179,17 +149,5 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     width: 120,
     height: 120,
-  },
-  textContainer: {
-    marginTop: 20, // Position below the circle
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  text: {
-    fontSize: 48,
-    fontWeight: '700',
-    fontFamily: 'PlayfairDisplay_700Bold', // Match app title font
-    color: '#3D5A50',
-    letterSpacing: 2,
   },
 });

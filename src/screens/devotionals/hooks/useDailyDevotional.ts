@@ -19,9 +19,19 @@ interface CompletionCacheEntry {
 
 let globalCompletionCache: CompletionCacheEntry | null = null;
 const completionSubscribers = new Set<(entry: CompletionCacheEntry) => void>();
+const refreshSubscribers = new Set<() => Promise<void>>();
 
 const notifyCompletionSubscribers = (entry: CompletionCacheEntry) => {
   completionSubscribers.forEach((listener) => listener(entry));
+};
+
+/**
+ * Request refresh of daily devotional data from outside (e.g. home pull-to-refresh).
+ * Calls refresh() on all currently mounted useDailyDevotional instances.
+ */
+export const requestDailyDevotionalRefresh = (): Promise<void> => {
+  if (refreshSubscribers.size === 0) return Promise.resolve();
+  return Promise.all([...refreshSubscribers].map((fn) => fn())).then(() => {});
 };
 
 interface UseDailyDevotionalReturn {
@@ -357,6 +367,14 @@ export const useDailyDevotional = (): UseDailyDevotionalReturn => {
     await Promise.all([fetchDevotional(), fetchCompletion()]);
     setLoading(false);
   }, [fetchDevotional, fetchCompletion]);
+
+  // Register so requestDailyDevotionalRefresh() can trigger refresh (e.g. from Home pull-to-refresh)
+  useEffect(() => {
+    refreshSubscribers.add(refresh);
+    return () => {
+      refreshSubscribers.delete(refresh);
+    };
+  }, [refresh]);
 
   // Check if all items are completed
   const allCompleted = completion

@@ -56,6 +56,7 @@ export const Header: React.FC<HeaderProps> = ({
                 imageUrl={profile?.avatar_url}
                 size={40}
                 onPress={openProfile}
+                backgroundColor={colors.primary}
               />
             )
           )}

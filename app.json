@@ -2,19 +2,27 @@
   "expo": {
     "name": "Rooted",
     "slug": "Rooted",
-    "version": "1.0.3",
+    "version": "1.0.4",
     "orientation": "portrait",
     "icon": "./assets/rootedlogo.png",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
+    "plugins": [
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#F5F4EF"
+        }
+      ]
+    ],
     "splash": {
-      "image": "./assets/rootedlogo.png",
       "resizeMode": "contain",
-      "backgroundColor": "#E8E4DF"
+      "backgroundColor": "#F5F4EF"
     },
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.ronkommoji.rooted",
+      "buildNumber": "14",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
       },

@@ -16,6 +16,7 @@ import { useTheme } from '../../../theme/ThemeContext';
 import { MemberSubmission } from './StoryRow';
 import { CommentsModal, Comment } from './CommentsModal';
 import { supabase } from '../../../lib/supabase';
+import { Avatar } from '../../../components/Avatar';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
 const CARD_PADDING = 32; // 16px on each side
@@ -46,8 +47,8 @@ export const SubmissionCard: React.FC<SubmissionCardProps> = React.memo(({
   const navigation = useNavigation<any>();
   const [showMenu, setShowMenu] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  // Default 1:1 - image shows immediately; getSize refines when it completes
   const [imageAspectRatio, setImageAspectRatio] = useState<number>(1);
-  const [imageLoaded, setImageLoaded] = useState(false);
   
   // Comments state
   const [showComments, setShowComments] = useState(false);
@@ -102,31 +103,21 @@ export const SubmissionCard: React.FC<SubmissionCardProps> = React.memo(({
     fetchCommentData();
   }, [fetchCommentData]);
 
-  // Load image dimensions and calculate aspect ratio
+  // Refine aspect ratio in background when dimensions load (don't block image display)
   useEffect(() => {
-    if (submission.imageUrl) {
-      Image.getSize(
-        submission.imageUrl,
-        (width, height) => {
-          let ratio = width / height;
-          // Clamp aspect ratio to Instagram-style limits
-          // If image is too tall, clamp to 4:5
-          // If image is too wide, clamp to 1.91:1
-          if (ratio < MAX_ASPECT_RATIO) {
-            ratio = MAX_ASPECT_RATIO;
-          } else if (ratio > MIN_ASPECT_RATIO) {
-            ratio = MIN_ASPECT_RATIO;
-          }
-          setImageAspectRatio(ratio);
-          setImageLoaded(true);
-        },
-        (error) => {
-          console.error('Error loading image dimensions:', error);
-          setImageAspectRatio(1); // Fallback to square
-          setImageLoaded(true);
-        }
-      );
-    }
+    if (!submission.imageUrl) return;
+    Image.getSize(
+      submission.imageUrl,
+      (width, height) => {
+        let ratio = width / height;
+        if (ratio < MAX_ASPECT_RATIO) ratio = MAX_ASPECT_RATIO;
+        else if (ratio > MIN_ASPECT_RATIO) ratio = MIN_ASPECT_RATIO;
+        setImageAspectRatio(ratio);
+      },
+      () => {
+        // Keep default 1:1 on error - image still displays
+      }
+    );
   }, [submission.imageUrl]);
 
   const getTimeAgo = (dateString: string | null) => {
@@ -189,16 +180,12 @@ export const SubmissionCard: React.FC<SubmissionCardProps> = React.memo(({
           accessibilityRole="button"
           accessibilityLabel={`View ${submission.memberName}'s profile`}
         >
-          <View
-            style={[
-              styles.avatar,
-              { backgroundColor: isDark ? '#3D4D49' : '#E8E7E2' },
-            ]}
-          >
-            <Text style={[styles.avatarText, { color: colors.text }]}>
-              {getInitials(submission.memberName)}
-            </Text>
-          </View>
+          <Avatar
+            name={submission.memberName}
+            imageUrl={submission.avatarUrl}
+            size={40}
+            backgroundColor={colors.primary}
+          />
           <Text style={[styles.memberName, { color: colors.text }]}>
             {submission.memberName}
           </Text>
@@ -215,7 +202,7 @@ export const SubmissionCard: React.FC<SubmissionCardProps> = React.memo(({
         )}
       </View>
 
-      {/* Image */}
+      {/* Image - show immediately; aspect ratio refines when getSize completes */}
       <TouchableOpacity onPress={onImagePress} activeOpacity={0.95}>
         {isDeleting ? (
           <View style={[styles.imageContainer, { aspectRatio: imageAspectRatio }]}>
@@ -225,10 +212,6 @@ export const SubmissionCard: React.FC<SubmissionCardProps> = React.memo(({
                 Deleting...
               </Text>
             </View>
-          </View>
-        ) : !imageLoaded ? (
-          <View style={[styles.imageContainer, { aspectRatio: 1, backgroundColor: isDark ? '#2A2A2A' : '#E8E7E2' }]}>
-            <ActivityIndicator size="small" color={isDark ? '#3D5A50' : colors.primary} />
           </View>
         ) : (
           <Image

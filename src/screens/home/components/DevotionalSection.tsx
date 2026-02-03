@@ -14,7 +14,7 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { useTheme } from '../../../theme/ThemeContext';
-import { StoryRow } from '../../devotionals/components';
+import { StoryRow, StoryRowSkeleton } from '../../devotionals/components';
 
 export interface DevotionalMember {
   memberId: string;
@@ -33,6 +33,7 @@ export interface DevotionalSectionProps {
   onMemberPress: (memberId: string) => void;
   onAddPress: () => void;
   onSeeAllPress: () => void;
+  loading?: boolean;
 }
 
 export const DevotionalSection: React.FC<DevotionalSectionProps> = ({
@@ -42,11 +43,12 @@ export const DevotionalSection: React.FC<DevotionalSectionProps> = ({
   onMemberPress,
   onAddPress,
   onSeeAllPress,
+  loading = false,
 }) => {
   const { colors } = useTheme();
 
-  // Don't render if no submissions
-  if (members.length === 0) {
+  // Don't render if no submissions and not loading
+  if (members.length === 0 && !loading) {
     return null;
   }
 
@@ -63,13 +65,17 @@ export const DevotionalSection: React.FC<DevotionalSectionProps> = ({
         </TouchableOpacity>
       </View>
 
-      <StoryRow
-        members={members}
-        currentUserId={currentUserId}
-        currentUserHasPosted={currentUserHasPosted}
-        onMemberPress={onMemberPress}
-        onAddPress={onAddPress}
-      />
+      {loading ? (
+        <StoryRowSkeleton />
+      ) : (
+        <StoryRow
+          members={members}
+          currentUserId={currentUserId}
+          currentUserHasPosted={currentUserHasPosted}
+          onMemberPress={onMemberPress}
+          onAddPress={onAddPress}
+        />
+      )}
     </View>
   );
 };

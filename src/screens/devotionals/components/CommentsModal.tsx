@@ -19,6 +19,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../../theme/ThemeContext';
 import { supabase } from '../../../lib/supabase';
 import { useAppStore } from '../../../store/useAppStore';
+import { Avatar } from '../../../components/Avatar';
 
 export interface Comment {
   id: string;
@@ -229,11 +230,12 @@ export const CommentsModal: React.FC<CommentsModalProps> = ({
 
     return (
       <View style={styles.commentItem}>
-        <View style={[styles.commentAvatar, { backgroundColor: isDark ? '#3D4D49' : '#E8E7E2' }]}>
-          <Text style={[styles.commentAvatarText, { color: colors.text }]}>
-            {getInitials(item.profiles?.full_name || 'Unknown')}
-          </Text>
-        </View>
+        <Avatar
+          name={item.profiles?.full_name || 'Unknown'}
+          imageUrl={item.profiles?.avatar_url}
+          size={32}
+          backgroundColor={colors.primary}
+        />
         <View style={styles.commentContent}>
           <View style={styles.commentHeader}>
             <Text style={[styles.commentAuthor, { color: colors.text }]}>
@@ -335,11 +337,12 @@ export const CommentsModal: React.FC<CommentsModalProps> = ({
             }
           ]}
         >
-            <View style={[styles.inputAvatar, { backgroundColor: isDark ? '#3D4D49' : '#E8E7E2' }]}>
-              <Text style={[styles.inputAvatarText, { color: colors.text }]}>
-                {getInitials(profile?.full_name || 'You')}
-              </Text>
-            </View>
+            <Avatar
+              name={profile?.full_name || 'You'}
+              imageUrl={profile?.avatar_url}
+              size={32}
+              backgroundColor={colors.primary}
+            />
             <TextInput
               style={[styles.input, { 
                 color: colors.text,

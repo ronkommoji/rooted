@@ -3,7 +3,7 @@ import { format, subDays } from 'date-fns';
 import { supabase, supabaseUrl } from '../../../lib/supabase';
 import { useAppStore } from '../../../store/useAppStore';
 import { Profile, Devotional, GroupMemberWithProfile } from '../../../types/database';
-import { MemberSubmission } from '../components/StoryRow';
+import { MemberSubmission, StorySlide } from '../components/StoryRow';
 import { fetchTodayDevotional } from '../../../lib/devotionalApi';
 import { validateImage, generateUniqueFilename } from '../../../lib/fileValidation';
 import { logger } from '../../../lib/logger';
@@ -23,7 +23,9 @@ interface UseDevotionalsReturn {
   // Data
   memberSubmissions: MemberSubmission[];
   feedSubmissions: MemberSubmission[];
+  storySlides: StorySlide[];
   currentUserHasPosted: boolean;
+  currentUserCompletedDaily: boolean;
   completedCount: number;
   totalMembers: number;
   currentUserStreak: number;
@@ -364,6 +366,7 @@ export const useDevotionals = (selectedDate: Date): UseDevotionalsReturn => {
       return {
         memberId: member.user_id,
         memberName: member.profiles?.full_name || 'Unknown',
+        avatarUrl: member.profiles?.avatar_url || null,
         imageUrl: devotional?.image_url || null,
         hasPosted,
         createdAt: devotional?.created_at || (hasCompletedDaily ? new Date().toISOString() : null),
@@ -396,6 +399,61 @@ export const useDevotionals = (selectedDate: Date): UseDevotionalsReturn => {
     const hasDailyDevotional = currentUserId ? dailyCompletionUserIds.has(currentUserId) : false;
     return hasImageDevotional || hasDailyDevotional;
   }, [devotionals, currentUserId, dailyCompletionUserIds]);
+
+  // Check if current user completed daily devotional
+  const currentUserCompletedDaily = useMemo(() => {
+    return currentUserId ? dailyCompletionUserIds.has(currentUserId) : false;
+  }, [currentUserId, dailyCompletionUserIds]);
+
+  // Build story slides - one slide per story item (daily and/or image)
+  // Members can have multiple slides (daily + image)
+  const storySlides: StorySlide[] = useMemo(() => {
+    const slides: StorySlide[] = [];
+    
+    // Only include members who have posted
+    const postedMembers = memberSubmissions.filter((m) => m.hasPosted);
+    
+    // Sort members: current user first, then by posted status, then alphabetically
+    const sortedMembers = [...postedMembers].sort((a, b) => {
+      if (a.memberId === currentUserId) return -1;
+      if (b.memberId === currentUserId) return 1;
+      return a.memberName.localeCompare(b.memberName);
+    });
+
+    for (const member of sortedMembers) {
+      const hasCompletedDaily = dailyCompletionUserIds.has(member.memberId);
+      const hasImageDevotional = !!member.imageUrl;
+      const dailyCompletion = dailyCompletions.get(member.memberId);
+
+      // Add daily devotional slide if completed (always show if they completed daily)
+      if (hasCompletedDaily && dailyDevotionalImageUrl) {
+        slides.push({
+          memberId: member.memberId,
+          memberName: member.memberName,
+          type: 'daily',
+          imageUrl: dailyDevotionalImageUrl,
+          title: 'Completed in app devotional',
+          dailyDevotionalComment: dailyCompletion?.hasComment ? dailyCompletion.commentText : undefined,
+          dailyDevotionalCommentId: dailyCompletion?.commentId,
+        });
+      }
+
+      // Add image devotional slide if posted
+      if (hasImageDevotional && member.imageUrl) {
+        slides.push({
+          memberId: member.memberId,
+          memberName: member.memberName,
+          type: 'image',
+          imageUrl: member.imageUrl,
+          devotionalId: member.devotionalId,
+          isLiked: member.isLiked,
+          likes: member.likes,
+        });
+      }
+    }
+
+    return slides;
+  }, [memberSubmissions, dailyCompletionUserIds, dailyCompletions, dailyDevotionalImageUrl, currentUserId]);
 
   // Progress counts
   const completedCount = feedSubmissions.length;
@@ -750,7 +808,9 @@ export const useDevotionals = (selectedDate: Date): UseDevotionalsReturn => {
   return {
     memberSubmissions,
     feedSubmissions,
+    storySlides,
     currentUserHasPosted,
+    currentUserCompletedDaily,
     completedCount,
     totalMembers,
     currentUserStreak: userStreak,

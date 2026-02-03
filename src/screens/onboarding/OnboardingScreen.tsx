@@ -16,17 +16,24 @@ import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { format } from 'date-fns';
 import { useTheme } from '../../theme/ThemeContext';
-import { Input, Button, Card } from '../../components';
+import { Input, Button, Card, Avatar } from '../../components';
 import { useAppStore } from '../../store/useAppStore';
 import { requestNotificationPermissions, registerForPushNotifications } from '../../lib/notifications';
+import { pickAndUploadAvatar, showAvatarSourceOptions, updateProfileAvatar } from '../../lib/avatarUpload';
+import { supabase } from '../../lib/supabase';
+import { useQueryClient } from '@tanstack/react-query';
+import { queryKeys } from '../../lib/queryKeys';
 
-type OnboardingStep = 'choice' | 'create' | 'join' | 'notifications' | 'notification-setup';
+type OnboardingStep = 'profile' | 'choice' | 'create' | 'join' | 'notifications' | 'notification-setup';
 
 export const OnboardingScreen: React.FC = () => {
   const { colors, isDark } = useTheme();
-  const { createGroup, joinGroup, fetchGroupMembers, updatePreferences } = useAppStore();
+  const { createGroup, joinGroup, fetchGroupMembers, updatePreferences, session, profile, fetchProfile } = useAppStore();
+  const queryClient = useQueryClient();
   
-  const [step, setStep] = useState<OnboardingStep>('choice');
+  const [step, setStep] = useState<OnboardingStep>('profile');
+  const [fullName, setFullName] = useState(profile?.full_name || '');
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(profile?.avatar_url || null);
   const [groupName, setGroupName] = useState('');
   const [groupDescription, setGroupDescription] = useState('');
   const [inviteCode, setInviteCode] = useState('');
@@ -45,6 +52,71 @@ export const OnboardingScreen: React.FC = () => {
   const [prayerReminderTime, setPrayerReminderTime] = useState(new Date(new Date().setHours(20, 0, 0, 0))); // 8 PM
   const [showPrayerTimePicker, setShowPrayerTimePicker] = useState(false);
   const [smartNotificationsEnabled, setSmartNotificationsEnabled] = useState(true);
+
+  const handleContinueProfile = async () => {
+    if (!fullName.trim()) {
+      Alert.alert('Error', 'Please enter your name');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      // Update profile with name (and avatar if uploaded)
+      const updates: any = { full_name: fullName.trim() };
+      if (avatarUrl) {
+        updates.avatar_url = avatarUrl;
+      }
+
+      const { error } = await supabase
+        .from('profiles')
+        .update(updates)
+        .eq('id', session?.user?.id || '');
+
+      if (error) {
+        throw error;
+      }
+
+      // Refresh profile in store and group members
+      await fetchProfile();
+      await fetchGroupMembers();
+
+      // Aggressively invalidate and refetch all related queries
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.profile.all, refetchType: 'all' }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.devotionals.all, refetchType: 'all' }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.groups.all, refetchType: 'all' }),
+      ]);
+
+      // Move to choice step
+      setStep('choice');
+    } catch (error: any) {
+      Alert.alert('Error', error.message || 'Failed to update profile');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleUploadAvatar = async () => {
+    if (!session?.user?.id) return;
+
+    const source = await showAvatarSourceOptions();
+    if (!source) return;
+
+    setLoading(true);
+    try {
+      const result = await pickAndUploadAvatar(session.user.id, source);
+      
+      if (result.success && result.avatarUrl) {
+        setAvatarUrl(result.avatarUrl);
+      } else {
+        Alert.alert('Error', result.error || 'Failed to upload avatar');
+      }
+    } catch (error: any) {
+      Alert.alert('Error', 'Failed to upload avatar');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleCreateGroup = async () => {
     if (!groupName.trim()) {
@@ -169,6 +241,62 @@ export const OnboardingScreen: React.FC = () => {
       setLoading(false);
     }
   };
+
+  const renderProfile = () => (
+    <View style={styles.formContainer}>
+      <View style={styles.formHeader}>
+        <View style={[styles.formIconContainer, { backgroundColor: colors.accent + '40' }]}>
+          <Ionicons name="person" size={32} color={colors.primary} />
+        </View>
+        <Text style={[styles.formTitle, { color: colors.text }]}>
+          Set Up Your Profile
+        </Text>
+        <Text style={[styles.formSubtitle, { color: colors.textSecondary }]}>
+          Help your group members recognize you
+        </Text>
+      </View>
+
+      <View style={styles.form}>
+        {/* Avatar Upload */}
+        <View style={styles.avatarSection}>
+          <TouchableOpacity 
+            onPress={handleUploadAvatar}
+            style={styles.avatarButton}
+            disabled={loading}
+          >
+            <Avatar 
+              name={fullName || 'You'} 
+              imageUrl={avatarUrl} 
+              size={100}
+              backgroundColor={colors.primary}
+            />
+            <View style={[styles.avatarBadge, { backgroundColor: isDark ? '#3D5A50' : colors.primary }]}>
+              <Ionicons name="camera" size={20} color="#FFFFFF" />
+            </View>
+          </TouchableOpacity>
+          <Text style={[styles.avatarHint, { color: colors.textMuted }]}>
+            Tap to add a photo (optional)
+          </Text>
+        </View>
+
+        <Input
+          label="Full Name"
+          placeholder="Enter your name"
+          value={fullName}
+          onChangeText={setFullName}
+          autoCapitalize="words"
+          containerStyle={{ marginBottom: 24 }}
+        />
+
+        <Button
+          title="Continue"
+          onPress={handleContinueProfile}
+          loading={loading}
+          fullWidth
+        />
+      </View>
+    </View>
+  );
 
   const renderChoice = () => (
     <View style={styles.choiceContainer}>
@@ -323,7 +451,7 @@ export const OnboardingScreen: React.FC = () => {
       </View>
 
       <View style={styles.form}>
-        <Card style={[styles.infoCard, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
+        <Card style={[styles.infoCard, { backgroundColor: colors.card, borderColor: colors.cardBorder }] as any}>
           <View style={styles.infoRow}>
             <Ionicons name="book-outline" size={20} color={colors.primary} />
             <Text style={[styles.infoText, { color: colors.textSecondary }]}>
@@ -331,7 +459,7 @@ export const OnboardingScreen: React.FC = () => {
             </Text>
           </View>
           <View style={styles.infoRow}>
-            <Ionicons name="hands-pray" size={20} color={colors.primary} />
+            <Ionicons name="heart-outline" size={20} color={colors.primary} />
             <Text style={[styles.infoText, { color: colors.textSecondary }]}>
               Prayer request updates
             </Text>
@@ -377,7 +505,7 @@ export const OnboardingScreen: React.FC = () => {
       </View>
 
       <View style={styles.form}>
-        <Card style={[styles.infoCard, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
+        <Card style={[styles.infoCard, { backgroundColor: colors.card, borderColor: colors.cardBorder }] as any}>
           <View style={styles.settingRow}>
             <Text style={[styles.settingLabel, { color: colors.text }]}>
               Number of Devotional Reminders
@@ -579,6 +707,7 @@ export const OnboardingScreen: React.FC = () => {
           contentContainerStyle={styles.scrollContent}
           keyboardShouldPersistTaps="handled"
         >
+          {step === 'profile' && renderProfile()}
           {step === 'choice' && renderChoice()}
           {step === 'create' && renderCreateGroup()}
           {step === 'join' && renderJoinGroup()}
@@ -684,6 +813,30 @@ const styles = StyleSheet.create({
   },
   form: {
     marginTop: 8,
+  },
+  avatarSection: {
+    alignItems: 'center',
+    marginBottom: 24,
+  },
+  avatarButton: {
+    position: 'relative',
+    marginBottom: 8,
+  },
+  avatarBadge: {
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 3,
+    borderColor: '#FFFFFF',
+  },
+  avatarHint: {
+    fontSize: 12,
+    textAlign: 'center',
   },
   backButton: {
     marginTop: 12,

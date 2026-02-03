@@ -23,6 +23,7 @@ import {
   addVerseComment,
   deleteVerseComment,
 } from '../hooks/useBibleComments';
+import { Avatar } from '../../../components/Avatar';
 
 interface VerseCommentsModalProps {
   visible: boolean;
@@ -215,11 +216,12 @@ export const VerseCommentsModal: React.FC<VerseCommentsModalProps> = ({
 
     return (
       <View style={styles.commentItem}>
-        <View style={[styles.commentAvatar, { backgroundColor: isDark ? '#3D4D49' : '#E8E7E2' }]}>
-          <Text style={[styles.commentAvatarText, { color: colors.text }]}>
-            {getInitials(item.profiles?.full_name || 'Unknown')}
-          </Text>
-        </View>
+        <Avatar
+          name={item.profiles?.full_name || 'Unknown'}
+          imageUrl={item.profiles?.avatar_url}
+          size={32}
+          backgroundColor={colors.primary}
+        />
         <View style={styles.commentContent}>
           <View style={styles.commentHeader}>
             <Text style={[styles.commentAuthor, { color: colors.text }]}>
@@ -332,11 +334,12 @@ export const VerseCommentsModal: React.FC<VerseCommentsModalProps> = ({
             },
           ]}
         >
-          <View style={[styles.inputAvatar, { backgroundColor: isDark ? '#3D4D49' : '#E8E7E2' }]}>
-            <Text style={[styles.inputAvatarText, { color: colors.text }]}>
-              {getInitials(profile?.full_name || 'You')}
-            </Text>
-          </View>
+          <Avatar
+            name={profile?.full_name || 'You'}
+            imageUrl={profile?.avatar_url}
+            size={32}
+            backgroundColor={colors.primary}
+          />
           <TextInput
             style={[
               styles.input,

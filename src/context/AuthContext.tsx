@@ -323,7 +323,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     // because we now read it directly from the store via getState()
   }, [setSession, setLoading, fetchProfile, fetchCurrentGroup, fetchPreferences]);
 
-  const signUp = async (email: string, password: string, fullName: string) => {
+  const signUp = async (email: string, password: string) => {
     // Check rate limit before attempting signup
     const rateLimitCheck = await checkRateLimit(email, {
       maxAttempts: 3, // Stricter limit for signup
@@ -343,11 +343,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       const { error } = await supabase.auth.signUp({
         email,
         password,
-        options: {
-          data: {
-            full_name: fullName,
-          },
-        },
       });
 
       if (error) {

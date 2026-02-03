@@ -15,7 +15,7 @@ import { useTheme } from '../../theme/ThemeContext';
 import { Input, Button } from '../../components';
 import { useAuth } from '../../context/AuthContext';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { validatePassword, validateEmail, validateFullName, sanitizeInput, sanitizeEmail } from '../../lib/validation';
+import { validatePassword, validateEmail, sanitizeInput, sanitizeEmail } from '../../lib/validation';
 
 type Props = {
   navigation: NativeStackNavigationProp<any>;
@@ -25,7 +25,6 @@ export const SignUpScreen: React.FC<Props> = ({ navigation }) => {
   const { colors } = useTheme();
   const { signUp } = useAuth();
   
-  const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -34,17 +33,9 @@ export const SignUpScreen: React.FC<Props> = ({ navigation }) => {
 
   const handleSignUp = async () => {
     // Sanitize inputs
-    const trimmedFullName = sanitizeInput(fullName);
     const trimmedEmail = sanitizeEmail(email);
     const trimmedPassword = sanitizeInput(password);
     const trimmedConfirmPassword = sanitizeInput(confirmPassword);
-
-    // Validate full name
-    const nameValidation = validateFullName(trimmedFullName);
-    if (!nameValidation.valid) {
-      Alert.alert('Error', nameValidation.error);
-      return;
-    }
 
     // Validate email
     const emailValidation = validateEmail(trimmedEmail);
@@ -68,7 +59,7 @@ export const SignUpScreen: React.FC<Props> = ({ navigation }) => {
 
     setLoading(true);
     try {
-      await signUp(trimmedEmail, trimmedPassword, trimmedFullName);
+      await signUp(trimmedEmail, trimmedPassword);
       Alert.alert(
         'Success',
         'Account created! Please check your email to verify your account.',
@@ -111,14 +102,6 @@ export const SignUpScreen: React.FC<Props> = ({ navigation }) => {
           </View>
 
           <View style={styles.form}>
-            <Input
-              label="Full Name"
-              placeholder="Enter your full name"
-              value={fullName}
-              onChangeText={setFullName}
-              autoCapitalize="words"
-            />
-
             <Input
               label="Email"
               placeholder="Enter your email"

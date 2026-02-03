@@ -374,7 +374,12 @@ export const SettingsScreen: React.FC = () => {
         >
           <Card style={styles.profileCard}>
             <View style={styles.profileContent}>
-              <Avatar name={profile?.full_name} size={60} />
+              <Avatar 
+                name={profile?.full_name} 
+                imageUrl={profile?.avatar_url}
+                size={60}
+                backgroundColor={colors.primary}
+              />
               <View style={styles.profileInfo}>
                 <Text style={[styles.profileName, { color: colors.text }]}>
                   {profile?.full_name || 'User'}

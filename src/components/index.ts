@@ -9,4 +9,5 @@ export { EmptyState } from './EmptyState';
 export { Header } from './Header';
 export { ChallengeCard } from './ChallengeCard';
 export { ChallengeDetailModal } from './ChallengeDetailModal';
+export { ProfileSkeleton } from './ProfileSkeleton';
 

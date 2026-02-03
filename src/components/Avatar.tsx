@@ -7,13 +7,15 @@ interface AvatarProps {
   imageUrl?: string | null;
   size?: number;
   onPress?: () => void;
+  backgroundColor?: string;
 }
 
 export const Avatar: React.FC<AvatarProps> = ({ 
   name = '', 
   imageUrl, 
   size = 40, 
-  onPress 
+  onPress,
+  backgroundColor 
 }) => {
   const { colors, isDark } = useTheme();
   
@@ -29,8 +31,8 @@ export const Avatar: React.FC<AvatarProps> = ({
 
   const initials = getInitials(name);
   
-  // Use neutral color for avatars in dark mode, primary (green) only in light mode
-  const avatarBg = isDark ? (colors.avatarBg || '#3A3A3A') : colors.primary;
+  // Use custom backgroundColor if provided, otherwise use neutral beige/gray
+  const avatarBg = backgroundColor || (isDark ? '#3A3A3A' : '#E8E7E2');
   
   const containerStyle = {
     width: size,
@@ -41,12 +43,16 @@ export const Avatar: React.FC<AvatarProps> = ({
 
   const content = imageUrl ? (
     <Image 
+      key={imageUrl}
       source={{ uri: imageUrl }} 
-      style={[containerStyle, styles.image]} 
+      style={[containerStyle, styles.image]}
     />
   ) : (
     <View style={[styles.container, containerStyle]}>
-      <Text style={[styles.initial, { fontSize: initials.length > 1 ? size * 0.35 : size * 0.4, color: '#FFFFFF' }]}>
+      <Text style={[styles.initial, { 
+        fontSize: initials.length > 1 ? size * 0.35 : size * 0.4, 
+        color: backgroundColor ? '#FFFFFF' : (isDark ? '#FFFFFF' : colors.text)
+      }]}>
         {initials}
       </Text>
     </View>

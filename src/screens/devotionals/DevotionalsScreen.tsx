@@ -49,7 +49,9 @@ export const DevotionalsScreen: React.FC = () => {
   const {
     memberSubmissions,
     feedSubmissions,
+    storySlides,
     currentUserHasPosted,
+    currentUserCompletedDaily,
     completedCount,
     totalMembers,
     currentUserStreak,
@@ -249,18 +251,19 @@ export const DevotionalsScreen: React.FC = () => {
         onDailyDevotionalComplete={async () => {
           try {
             await addDailyDevotional();
-            setShowAddSheet(false);
+            // Don't close the sheet - let user optionally add photo or click "I'm Done"
           } catch (error: any) {
             Alert.alert('Error', error.message || 'Failed to complete daily devotional');
           }
         }}
         uploading={uploading}
+        hasCompletedInAppForDate={currentUserCompletedDaily}
       />
 
       {/* Story Viewer Modal */}
       <StoryViewerModal
         visible={showStoryViewer}
-        stories={memberSubmissions}
+        storySlides={storySlides}
         initialMemberId={storyViewerStartMember}
         onClose={() => setShowStoryViewer(false)}
       />

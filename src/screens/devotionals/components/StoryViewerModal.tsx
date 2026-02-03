@@ -12,33 +12,32 @@ import {
   PanResponder,
   StatusBar,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
-import { MemberSubmission } from './StoryRow';
+import { StorySlide } from './StoryRow';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const AUTO_ADVANCE_DELAY = 5000; // 5 seconds
 
 interface StoryViewerModalProps {
   visible: boolean;
-  stories: MemberSubmission[];
+  storySlides: StorySlide[];
   initialMemberId: string;
   onClose: () => void;
 }
 
 export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({
   visible,
-  stories,
+  storySlides,
   initialMemberId,
   onClose,
 }) => {
   const navigation = useNavigation<any>();
+  const insets = useSafeAreaInsets();
   
-  // Filter to only posted stories (with images OR daily devotional completions)
-  const postedStories = stories.filter((s) => s.hasPosted && (s.imageUrl || s.isDailyDevotional));
-
-  const initialIndex = postedStories.findIndex(
+  // Find the first slide for the initial member
+  const initialIndex = storySlides.findIndex(
     (s) => s.memberId === initialMemberId
   );
   const [currentIndex, setCurrentIndex] = useState(
@@ -65,13 +64,29 @@ export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({
   // Reset index when modal opens
   useEffect(() => {
     if (visible) {
-      const idx = postedStories.findIndex((s) => s.memberId === initialMemberId);
+      const idx = storySlides.findIndex((s) => s.memberId === initialMemberId);
       setCurrentIndex(idx >= 0 ? idx : 0);
       progressAnim.setValue(0);
       progressValue.current = 0;
       setIsPaused(false);
     }
-  }, [visible, initialMemberId]);
+  }, [visible, initialMemberId, storySlides]);
+
+  // Prefetch all story images when viewer opens so they're cached for smooth viewing
+  useEffect(() => {
+    if (!visible || storySlides.length === 0) return;
+
+    const urls: string[] = [];
+    storySlides.forEach((slide) => {
+      if (slide.imageUrl?.trim()) urls.push(slide.imageUrl);
+    });
+
+    urls.forEach((url) => {
+      Image.prefetch(url).catch(() => {
+        // Ignore prefetch errors; image will load on demand
+      });
+    });
+  }, [visible, storySlides]);
 
   // Start animation helper
   const startAnimation = useCallback((fromValue: number = 0) => {
@@ -105,7 +120,7 @@ export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({
 
   // Auto-advance timer
   useEffect(() => {
-    if (!visible || postedStories.length === 0 || isPaused) return;
+    if (!visible || storySlides.length === 0 || isPaused) return;
 
     // Reset progress when changing stories
     progressAnim.setValue(0);
@@ -115,7 +130,7 @@ export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({
     return () => {
       stopAnimation();
     };
-  }, [visible, currentIndex, postedStories.length, isPaused, startAnimation, stopAnimation]);
+  }, [visible, currentIndex, storySlides.length, isPaused, startAnimation, stopAnimation]);
 
   // Handle pause/resume
   const handlePauseStart = useCallback(() => {
@@ -130,10 +145,10 @@ export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({
   }, [startAnimation]);
 
   const goToNext = () => {
-    if (currentIndex < postedStories.length - 1) {
+    if (currentIndex < storySlides.length - 1) {
       setCurrentIndex(currentIndex + 1);
     } else {
-      // Last story - close
+      // Last slide - close
       handleClose();
     }
   };
@@ -204,11 +219,11 @@ export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({
     }
   };
 
-  if (postedStories.length === 0) {
+  if (storySlides.length === 0) {
     return null;
   }
 
-  const currentStory = postedStories[currentIndex];
+  const currentSlide = storySlides[currentIndex];
 
   const getInitials = (name: string) => {
     const parts = name.split(' ');
@@ -236,10 +251,10 @@ export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({
         ]}
         {...panResponder.panHandlers}
       >
-        {/* Progress bars */}
-        <SafeAreaView edges={['top']} style={styles.safeTop}>
+        {/* Progress bars + header - use insets so content stays below status bar & Dynamic Island */}
+        <View style={[styles.safeTop, { paddingTop: insets.top }]}>
           <View style={styles.progressContainer}>
-            {postedStories.map((_, index) => (
+            {storySlides.map((_, index) => (
               <View key={index} style={styles.progressBarBg}>
                 <Animated.View
                   style={[
@@ -268,26 +283,26 @@ export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({
               onPress={() => {
                 onClose();
                 setTimeout(() => {
-                  navigation.navigate('Profile', { userId: currentStory.memberId });
+                  navigation.navigate('Profile', { userId: currentSlide.memberId });
                 }, 300);
               }}
               activeOpacity={0.7}
               accessibilityRole="button"
-              accessibilityLabel={`View ${currentStory.memberName}'s profile`}
+              accessibilityLabel={`View ${currentSlide.memberName}'s profile`}
             >
               <View style={styles.avatar}>
                 <Text style={styles.avatarText}>
-                  {getInitials(currentStory.memberName)}
+                  {getInitials(currentSlide.memberName)}
                 </Text>
               </View>
-              <Text style={styles.userName}>{currentStory.memberName}</Text>
+              <Text style={styles.userName}>{currentSlide.memberName}</Text>
             </TouchableOpacity>
 
             <TouchableOpacity onPress={handleClose} style={styles.closeButton}>
               <Ionicons name="close" size={28} color="#FFFFFF" />
             </TouchableOpacity>
           </View>
-        </SafeAreaView>
+        </View>
 
         {/* Image or Text Story */}
         <Pressable
@@ -297,18 +312,18 @@ export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({
           onPressOut={handlePauseEnd}
           delayLongPress={150}
         >
-          {currentStory.imageUrl ? (
+          {currentSlide.type === 'image' ? (
             <Image
-              source={{ uri: currentStory.imageUrl }}
+              source={{ uri: currentSlide.imageUrl, cache: 'force-cache' }}
               style={styles.image}
               resizeMode="contain"
             />
-          ) : currentStory.isDailyDevotional ? (
+          ) : currentSlide.type === 'daily' ? (
             <View style={styles.textStoryContainer}>
               {/* Background image from daily devotional API */}
-              {currentStory.dailyDevotionalImageUrl && (
+              {currentSlide.imageUrl && (
                 <Image
-                  source={{ uri: currentStory.dailyDevotionalImageUrl }}
+                  source={{ uri: currentSlide.imageUrl, cache: 'force-cache' }}
                   style={styles.backgroundImage}
                   resizeMode="cover"
                 />
@@ -318,11 +333,11 @@ export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({
               {/* Content */}
               <View style={styles.textStoryContent}>
                 <Ionicons name="checkmark-circle" size={64} color="#4CAF50" />
-                <Text style={styles.textStoryTitle}>Completed in app devotional</Text>
-                {currentStory.dailyDevotionalComment && (
+                <Text style={styles.textStoryTitle}>{currentSlide.title || 'Completed in app devotional'}</Text>
+                {currentSlide.dailyDevotionalComment && (
                   <View style={styles.commentContainer}>
                     <Text style={styles.commentLabel}>Your comment:</Text>
-                    <Text style={styles.commentText}>{currentStory.dailyDevotionalComment}</Text>
+                    <Text style={styles.commentText}>{currentSlide.dailyDevotionalComment}</Text>
                     <TouchableOpacity
                       style={styles.viewDevotionalButton}
                       onPress={() => {
@@ -361,6 +376,7 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     zIndex: 10,
+    backgroundColor: 'transparent',
   },
   progressContainer: {
     flexDirection: 'row',

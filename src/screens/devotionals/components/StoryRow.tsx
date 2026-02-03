@@ -2,10 +2,12 @@ import React from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../../theme/ThemeContext';
+import { Avatar } from '../../../components/Avatar';
 
 export interface MemberSubmission {
   memberId: string;
   memberName: string;
+  avatarUrl?: string | null;
   imageUrl: string | null;
   hasPosted: boolean;
   createdAt: string | null;
@@ -17,6 +19,19 @@ export interface MemberSubmission {
   dailyDevotionalComment?: string;
   dailyDevotionalCommentId?: string;
   dailyDevotionalImageUrl?: string; // Image from the /today API endpoint
+}
+
+export interface StorySlide {
+  memberId: string;
+  memberName: string;
+  type: 'daily' | 'image';
+  imageUrl: string;
+  title?: string; // e.g. "Completed in app devotional" for type 'daily'
+  devotionalId?: string;
+  isLiked?: boolean;
+  likes?: number;
+  dailyDevotionalComment?: string;
+  dailyDevotionalCommentId?: string;
 }
 
 interface StoryRowProps {
@@ -96,20 +111,12 @@ export const StoryRow: React.FC<StoryRowProps> = ({
                   !hasPosted && !isCurrentUser && { opacity: 0.5 },
                 ]}
               >
-                <View
-                  style={[
-                    styles.avatar,
-                    { backgroundColor: isDark ? '#3A3A3A' : '#E8E7E2' },
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.avatarText,
-                      { color: colors.text },
-                    ]}
-                  >
-                    {getInitials(member.memberName)}
-                  </Text>
+                <View style={styles.avatarContainer}>
+                  <Avatar
+                    name={member.memberName}
+                    imageUrl={member.avatarUrl}
+                    size={52}
+                  />
                 </View>
 
                 {/* Add badge for current user who hasn't posted */}
@@ -158,15 +165,12 @@ const styles = StyleSheet.create({
     padding: 3,
     marginBottom: 6,
   },
-  avatar: {
+  avatarContainer: {
     flex: 1,
-    borderRadius: 28,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  avatarText: {
-    fontSize: 18,
-    fontWeight: '600',
+    borderRadius: 28,
+    overflow: 'hidden',
   },
   addBadge: {
     position: 'absolute',

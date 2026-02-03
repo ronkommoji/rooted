@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -20,6 +20,7 @@ interface AddDevotionalSheetProps {
   onImageSelected: (imageUri: string) => void;
   onDailyDevotionalComplete?: () => void;
   uploading?: boolean;
+  hasCompletedInAppForDate?: boolean;
 }
 
 export const AddDevotionalSheet: React.FC<AddDevotionalSheetProps> = ({
@@ -28,12 +29,23 @@ export const AddDevotionalSheet: React.FC<AddDevotionalSheetProps> = ({
   onImageSelected,
   onDailyDevotionalComplete,
   uploading = false,
+  hasCompletedInAppForDate = false,
 }) => {
   const { colors, isDark } = useTheme();
   const [loading, setLoading] = useState(false);
+  const [completedInApp, setCompletedInApp] = useState(false);
   const { allCompleted, completeDailyDevotional } = useDailyDevotional();
   
   const isLoading = loading || uploading;
+
+  // Reset completedInApp state when modal closes or when it opens with hasCompletedInAppForDate
+  useEffect(() => {
+    if (visible) {
+      setCompletedInApp(hasCompletedInAppForDate);
+    } else {
+      setCompletedInApp(false);
+    }
+  }, [visible, hasCompletedInAppForDate]);
 
   const requestCameraPermission = async () => {
     const { status } = await ImagePicker.requestCameraPermissionsAsync();
@@ -136,13 +148,18 @@ export const AddDevotionalSheet: React.FC<AddDevotionalSheetProps> = ({
         // Fallback: if no handler provided, use the hook's method
         await completeDailyDevotional();
       }
-      onClose();
+      // Don't close - show success state with option to add photo
+      setCompletedInApp(true);
     } catch (error) {
       console.error('Error completing daily devotional:', error);
       Alert.alert('Error', 'Failed to complete daily devotional. Please try again.');
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleDone = () => {
+    onClose();
   };
 
   return (
@@ -176,97 +193,185 @@ export const AddDevotionalSheet: React.FC<AddDevotionalSheetProps> = ({
 
         {/* Content */}
         <View style={styles.content}>
-          <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
-            Share a photo that represents your devotional moment today
-          </Text>
+          {completedInApp ? (
+            // Success state - user completed in-app devotional
+            <>
+              <View style={styles.successHeader}>
+                <Ionicons name="checkmark-circle" size={64} color="#4CAF50" />
+                <Text style={[styles.successTitle, { color: colors.text }]}>
+                  You've completed today's devotional!
+                </Text>
+                <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
+                  Add a photo to share with your group? (optional)
+                </Text>
+              </View>
 
-          {isLoading ? (
-            <View style={styles.loadingContainer}>
-              <ActivityIndicator size="large" color={isDark ? '#3D5A50' : colors.primary} />
-              <Text style={[styles.loadingText, { color: colors.textSecondary }]}>
-                {uploading ? 'Uploading your devotional...' : 'Processing...'}
-              </Text>
-            </View>
+              {isLoading ? (
+                <View style={styles.loadingContainer}>
+                  <ActivityIndicator size="large" color={isDark ? '#3D5A50' : colors.primary} />
+                  <Text style={[styles.loadingText, { color: colors.textSecondary }]}>
+                    {uploading ? 'Uploading your devotional...' : 'Processing...'}
+                  </Text>
+                </View>
+              ) : (
+                <View style={styles.optionsContainer}>
+                  {/* Take Photo */}
+                  <TouchableOpacity
+                    style={[
+                      styles.optionCard,
+                      { backgroundColor: colors.card, borderColor: colors.cardBorder },
+                    ]}
+                    onPress={handleTakePhoto}
+                  >
+                    <View
+                      style={[
+                        styles.iconContainer,
+                        { backgroundColor: (isDark ? '#3D5A50' : colors.primary) + '20' },
+                      ]}
+                    >
+                      <Ionicons name="camera" size={32} color={isDark ? '#3D5A50' : colors.primary} />
+                    </View>
+                    <Text style={[styles.optionTitle, { color: colors.text }]}>
+                      Take Photo
+                    </Text>
+                    <Text style={[styles.optionDesc, { color: colors.textSecondary }]}>
+                      Capture this moment
+                    </Text>
+                  </TouchableOpacity>
+
+                  {/* Upload from Library */}
+                  <TouchableOpacity
+                    style={[
+                      styles.optionCard,
+                      { backgroundColor: colors.card, borderColor: colors.cardBorder },
+                    ]}
+                    onPress={handleUploadFromLibrary}
+                  >
+                    <View
+                      style={[
+                        styles.iconContainer,
+                        { backgroundColor: (isDark ? '#3D5A50' : colors.primary) + '20' },
+                      ]}
+                    >
+                      <Ionicons name="images" size={32} color={isDark ? '#3D5A50' : colors.primary} />
+                    </View>
+                    <Text style={[styles.optionTitle, { color: colors.text }]}>
+                      Upload from Library
+                    </Text>
+                    <Text style={[styles.optionDesc, { color: colors.textSecondary }]}>
+                      Choose an existing photo
+                    </Text>
+                  </TouchableOpacity>
+
+                  {/* I'm Done Button */}
+                  <TouchableOpacity
+                    style={[
+                      styles.doneButton,
+                      { backgroundColor: isDark ? '#3D5A50' : colors.primary },
+                    ]}
+                    onPress={handleDone}
+                  >
+                    <Text style={styles.doneButtonText}>I'm Done</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+            </>
           ) : (
-            <View style={styles.optionsContainer}>
-              {/* Take Photo */}
-              <TouchableOpacity
-                style={[
-                  styles.optionCard,
-                  { backgroundColor: colors.card, borderColor: colors.cardBorder },
-                ]}
-                onPress={handleTakePhoto}
-              >
-                <View
-                  style={[
-                    styles.iconContainer,
-                    { backgroundColor: (isDark ? '#3D5A50' : colors.primary) + '20' },
-                  ]}
-                >
-                  <Ionicons name="camera" size={32} color={isDark ? '#3D5A50' : colors.primary} />
-                </View>
-                <Text style={[styles.optionTitle, { color: colors.text }]}>
-                  Take Photo
-                </Text>
-                <Text style={[styles.optionDesc, { color: colors.textSecondary }]}>
-                  Capture this moment
-                </Text>
-              </TouchableOpacity>
+            // Initial state - show all three options
+            <>
+              <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
+                Share a photo that represents your devotional moment today
+              </Text>
 
-              {/* Upload from Library */}
-              <TouchableOpacity
-                style={[
-                  styles.optionCard,
-                  { backgroundColor: colors.card, borderColor: colors.cardBorder },
-                ]}
-                onPress={handleUploadFromLibrary}
-              >
-                <View
-                  style={[
-                    styles.iconContainer,
-                    { backgroundColor: (isDark ? '#3D5A50' : colors.primary) + '20' },
-                  ]}
-                >
-                  <Ionicons name="images" size={32} color={isDark ? '#3D5A50' : colors.primary} />
+              {isLoading ? (
+                <View style={styles.loadingContainer}>
+                  <ActivityIndicator size="large" color={isDark ? '#3D5A50' : colors.primary} />
+                  <Text style={[styles.loadingText, { color: colors.textSecondary }]}>
+                    {uploading ? 'Uploading your devotional...' : 'Processing...'}
+                  </Text>
                 </View>
-                <Text style={[styles.optionTitle, { color: colors.text }]}>
-                  Upload from Library
-                </Text>
-                <Text style={[styles.optionDesc, { color: colors.textSecondary }]}>
-                  Choose an existing photo
-                </Text>
-              </TouchableOpacity>
+              ) : (
+                <View style={styles.optionsContainer}>
+                  {/* Take Photo */}
+                  <TouchableOpacity
+                    style={[
+                      styles.optionCard,
+                      { backgroundColor: colors.card, borderColor: colors.cardBorder },
+                    ]}
+                    onPress={handleTakePhoto}
+                  >
+                    <View
+                      style={[
+                        styles.iconContainer,
+                        { backgroundColor: (isDark ? '#3D5A50' : colors.primary) + '20' },
+                      ]}
+                    >
+                      <Ionicons name="camera" size={32} color={isDark ? '#3D5A50' : colors.primary} />
+                    </View>
+                    <Text style={[styles.optionTitle, { color: colors.text }]}>
+                      Take Photo
+                    </Text>
+                    <Text style={[styles.optionDesc, { color: colors.textSecondary }]}>
+                      Capture this moment
+                    </Text>
+                  </TouchableOpacity>
 
-              {/* Complete In-App Devotional */}
-              <TouchableOpacity
-                style={[
-                  styles.optionCard,
-                  { 
-                    backgroundColor: colors.card, 
-                    borderColor: allCompleted ? (isDark ? '#3D5A50' : colors.primary) : colors.cardBorder,
-                    borderWidth: allCompleted ? 2 : 1,
-                  },
-                ]}
-                onPress={handleCompleteInAppDevotional}
-              >
-                <View
-                  style={[
-                    styles.iconContainer,
-                    { backgroundColor: (isDark ? '#3D5A50' : colors.primary) + '20' },
-                  ]}
-                >
-                  <Ionicons name="checkmark-circle" size={32} color={isDark ? '#3D5A50' : colors.primary} />
+                  {/* Upload from Library */}
+                  <TouchableOpacity
+                    style={[
+                      styles.optionCard,
+                      { backgroundColor: colors.card, borderColor: colors.cardBorder },
+                    ]}
+                    onPress={handleUploadFromLibrary}
+                  >
+                    <View
+                      style={[
+                        styles.iconContainer,
+                        { backgroundColor: (isDark ? '#3D5A50' : colors.primary) + '20' },
+                      ]}
+                    >
+                      <Ionicons name="images" size={32} color={isDark ? '#3D5A50' : colors.primary} />
+                    </View>
+                    <Text style={[styles.optionTitle, { color: colors.text }]}>
+                      Upload from Library
+                    </Text>
+                    <Text style={[styles.optionDesc, { color: colors.textSecondary }]}>
+                      Choose an existing photo
+                    </Text>
+                  </TouchableOpacity>
+
+                  {/* Complete In-App Devotional */}
+                  <TouchableOpacity
+                    style={[
+                      styles.optionCard,
+                      { 
+                        backgroundColor: colors.card, 
+                        borderColor: allCompleted ? (isDark ? '#3D5A50' : colors.primary) : colors.cardBorder,
+                        borderWidth: allCompleted ? 2 : 1,
+                      },
+                    ]}
+                    onPress={handleCompleteInAppDevotional}
+                  >
+                    <View
+                      style={[
+                        styles.iconContainer,
+                        { backgroundColor: (isDark ? '#3D5A50' : colors.primary) + '20' },
+                      ]}
+                    >
+                      <Ionicons name="checkmark-circle" size={32} color={isDark ? '#3D5A50' : colors.primary} />
+                    </View>
+                    <Text style={[styles.optionTitle, { color: colors.text }]}>
+                      Complete In-App Devotional
+                    </Text>
+                    <Text style={[styles.optionDesc, { color: colors.textSecondary }]}>
+                      {allCompleted 
+                        ? 'All items completed ✓' 
+                        : 'Complete Scripture, Devotional, and Prayer first'}
+                    </Text>
+                  </TouchableOpacity>
                 </View>
-                <Text style={[styles.optionTitle, { color: colors.text }]}>
-                  Complete In-App Devotional
-                </Text>
-                <Text style={[styles.optionDesc, { color: colors.textSecondary }]}>
-                  {allCompleted 
-                    ? 'All items completed ✓' 
-                    : 'Complete Scripture, Devotional, and Prayer first'}
-                </Text>
-              </TouchableOpacity>
-            </View>
+              )}
+            </>
           )}
         </View>
       </SafeAreaView>
@@ -347,6 +452,28 @@ const styles = StyleSheet.create({
   optionDesc: {
     fontSize: 14,
     textAlign: 'center',
+  },
+  successHeader: {
+    alignItems: 'center',
+    marginBottom: 32,
+  },
+  successTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    marginTop: 16,
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  doneButton: {
+    paddingVertical: 16,
+    borderRadius: 12,
+    alignItems: 'center',
+    marginTop: 8,
+  },
+  doneButtonText: {
+    color: '#FFFFFF',
+    fontSize: 17,
+    fontWeight: '600',
   },
 });
 

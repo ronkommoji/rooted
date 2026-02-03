@@ -35,10 +35,13 @@ export const EventsScreen: React.FC = () => {
   useEventsRealtime();
 
   const [filter, setFilter] = useState<'Upcoming' | 'Past'>('Upcoming');
-  const [events, setEvents] = useState<EventWithRsvps[]>([]);
+  const [upcomingEvents, setUpcomingEvents] = useState<EventWithRsvps[]>([]);
+  const [pastEvents, setPastEvents] = useState<EventWithRsvps[]>([]);
   const [refreshing, setRefreshing] = useState(false);
-  const [loading, setLoading] = useState(true);
+  const [loadingUpcoming, setLoadingUpcoming] = useState(true);
+  const [loadingPast, setLoadingPast] = useState(false);
   const [pastEventsCount, setPastEventsCount] = useState(0);
+  const pastEventsFetched = useRef(false);
   
   // Create event state
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -75,66 +78,85 @@ export const EventsScreen: React.FC = () => {
   // Ref for FlashList to enable scrolling
   const listRef = useRef<FlashListRef<EventWithRsvps>>(null);
 
-  const fetchEvents = useCallback(async () => {
-    if (!currentGroup?.id || !session?.user?.id) return;
+  const fetchEventsWithRsvps = useCallback(
+    async (eventsData: Event[]) => {
+      if (!session?.user?.id) return [];
+      return Promise.all(
+        (eventsData || []).map(async (event) => {
+          const { data: rsvps } = await supabase
+            .from('event_rsvps')
+            .select('status, user_id')
+            .eq('event_id', event.id);
 
+          const counts = { yes: 0, no: 0 };
+          let userRsvp: 'yes' | 'no' | null = null;
+
+          rsvps?.forEach((rsvp) => {
+            if (rsvp.status === 'yes') counts.yes++;
+            if (rsvp.status === 'no') counts.no++;
+            if (rsvp.user_id === session.user.id) {
+              userRsvp = rsvp.status as 'yes' | 'no';
+            }
+          });
+
+          return {
+            ...event,
+            rsvp_counts: counts,
+            user_rsvp: userRsvp,
+          } as EventWithRsvps;
+        })
+      );
+    },
+    [session?.user?.id]
+  );
+
+  const fetchUpcomingEvents = useCallback(async () => {
+    if (!currentGroup?.id || !session?.user?.id) return;
+    setLoadingUpcoming(true);
     const now = new Date().toISOString();
-    let query = supabase
+    const { data: eventsData, error } = await supabase
       .from('events')
       .select('*')
       .eq('group_id', currentGroup.id)
-      .order('event_date', { ascending: filter === 'Upcoming' });
-
-    if (filter === 'Upcoming') {
-      query = query.gte('event_date', now);
-    } else {
-      query = query.lt('event_date', now);
-    }
-
-    const { data: eventsData, error } = await query;
+      .gte('event_date', now)
+      .order('event_date', { ascending: true });
 
     if (error) {
-      console.error('Error fetching events:', error);
+      console.error('Error fetching upcoming events:', error);
+      setLoadingUpcoming(false);
       return;
     }
 
-    // Fetch RSVPs for each event
-    const eventsWithRsvps = await Promise.all(
-      (eventsData || []).map(async (event) => {
-        const { data: rsvps } = await supabase
-          .from('event_rsvps')
-          .select('status, user_id')
-          .eq('event_id', event.id);
-
-        const counts = { yes: 0, no: 0 };
-        let userRsvp: 'yes' | 'no' | null = null;
-
-        rsvps?.forEach((rsvp) => {
-          if (rsvp.status === 'yes') counts.yes++;
-          if (rsvp.status === 'no') counts.no++;
-          if (rsvp.user_id === session.user.id) {
-            userRsvp = rsvp.status as 'yes' | 'no';
-          }
-        });
-
-        return {
-          ...event,
-          rsvp_counts: counts,
-          user_rsvp: userRsvp,
-        } as EventWithRsvps;
-      })
-    );
-
-    setEvents(eventsWithRsvps);
-    setLoading(false);
-    // Clear expanded state when events change
+    const eventsWithRsvps = await fetchEventsWithRsvps(eventsData || []);
+    setUpcomingEvents(eventsWithRsvps);
     setExpandedEventId(null);
-    
-    // Update past events count if on Past tab
-    if (filter === 'Past') {
-      setPastEventsCount(eventsWithRsvps.length);
+    setLoadingUpcoming(false);
+  }, [currentGroup?.id, session?.user?.id, fetchEventsWithRsvps]);
+
+  const fetchPastEvents = useCallback(async () => {
+    if (!currentGroup?.id || !session?.user?.id) return;
+    pastEventsFetched.current = true; // Prevent double-fetch if user switches tabs while loading
+    setLoadingPast(true);
+    const now = new Date().toISOString();
+    const { data: eventsData, error } = await supabase
+      .from('events')
+      .select('*')
+      .eq('group_id', currentGroup.id)
+      .lt('event_date', now)
+      .order('event_date', { ascending: false });
+
+    if (error) {
+      console.error('Error fetching past events:', error);
+      setLoadingPast(false);
+      return;
     }
-  }, [currentGroup?.id, filter, session?.user?.id]);
+
+    const eventsWithRsvps = await fetchEventsWithRsvps(eventsData || []);
+    setPastEvents(eventsWithRsvps);
+    setPastEventsCount(eventsWithRsvps.length);
+    setExpandedEventId(null);
+    setLoadingPast(false);
+  }, [currentGroup?.id, session?.user?.id, fetchEventsWithRsvps]);
 
   // Fetch past events count separately
   const fetchPastEventsCount = useCallback(async () => {
@@ -152,9 +174,17 @@ export const EventsScreen: React.FC = () => {
     }
   }, [currentGroup?.id]);
 
+  // Load upcoming events on mount
   useEffect(() => {
-    fetchEvents();
-  }, [fetchEvents]);
+    fetchUpcomingEvents();
+  }, [fetchUpcomingEvents]);
+
+  // Load past events only when user first switches to Past tab (then cache for when they switch back)
+  useEffect(() => {
+    if (filter === 'Past' && !pastEventsFetched.current) {
+      fetchPastEvents();
+    }
+  }, [filter, fetchPastEvents]);
 
   useEffect(() => {
     fetchPastEventsCount();
@@ -162,31 +192,39 @@ export const EventsScreen: React.FC = () => {
 
   const onRefresh = async () => {
     setRefreshing(true);
-    await fetchEvents();
+    if (filter === 'Upcoming') {
+      await fetchUpcomingEvents();
+    } else {
+      await fetchPastEvents();
+    }
     setRefreshing(false);
   };
+
+  const events = filter === 'Upcoming' ? upcomingEvents : pastEvents;
+  const loading = filter === 'Upcoming' ? loadingUpcoming : loadingPast;
 
   const handleRsvp = async (event: EventWithRsvps, status: 'yes' | 'no') => {
     if (!session?.user?.id) return;
 
-    // Optimistic update
-    setEvents(prev => prev.map(e => {
-      if (e.id === event.id) {
+    const now = new Date().toISOString();
+    const isPast = event.event_date < now;
+    const updater = (prev: EventWithRsvps[]) =>
+      prev.map((e) => {
+        if (e.id !== event.id) return e;
         const oldStatus = e.user_rsvp;
         const newCounts = { ...e.rsvp_counts };
-        
-        // Remove old count
         if (oldStatus === 'yes') newCounts.yes--;
         if (oldStatus === 'no') newCounts.no--;
-        
-        // Add new count
         if (status === 'yes') newCounts.yes++;
         if (status === 'no') newCounts.no++;
-        
         return { ...e, user_rsvp: status, rsvp_counts: newCounts };
-      }
-      return e;
-    }));
+      });
+
+    if (isPast) {
+      setPastEvents(updater);
+    } else {
+      setUpcomingEvents(updater);
+    }
 
     const { error } = await supabase
       .from('event_rsvps')
@@ -201,8 +239,8 @@ export const EventsScreen: React.FC = () => {
       );
 
     if (error) {
-      // Revert on error
-      fetchEvents();
+      if (isPast) fetchPastEvents();
+      else fetchUpcomingEvents();
     }
   };
 
@@ -279,7 +317,7 @@ export const EventsScreen: React.FC = () => {
       }
 
       resetCreateModal();
-      await fetchEvents();
+      await fetchUpcomingEvents();
       // Scroll to top after adding new event
       setTimeout(() => {
         listRef.current?.scrollToIndex({ index: 0, animated: true });
@@ -401,7 +439,8 @@ export const EventsScreen: React.FC = () => {
       }
 
       resetEditModal();
-      fetchEvents();
+      await fetchUpcomingEvents();
+      await fetchPastEvents();
     } catch (error: any) {
       Alert.alert('Error', error.message || 'Failed to update event');
     } finally {
@@ -539,7 +578,12 @@ export const EventsScreen: React.FC = () => {
 
               if (error) throw error;
 
-              await fetchEvents();
+              const now = new Date().toISOString();
+              if ((selectedEvent?.event_date ?? '') < now) {
+                await fetchPastEvents();
+              } else {
+                await fetchUpcomingEvents();
+              }
               // Scroll to top after deleting event
               setTimeout(() => {
                 listRef.current?.scrollToIndex({ index: 0, animated: true });

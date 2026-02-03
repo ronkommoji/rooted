@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -6,22 +6,24 @@ import {
   ScrollView,
   TouchableOpacity,
   ActivityIndicator,
-  Image,
   Dimensions,
   Modal,
+  Image,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useQuery } from '@tanstack/react-query';
 import { useTheme } from '../../theme/ThemeContext';
-import { Card, Avatar, PillToggle } from '../../components';
+import { Card, Avatar, PillToggle, ProfileSkeleton } from '../../components';
 import { useAppStore } from '../../store/useAppStore';
-import { supabase } from '../../lib/supabase';
 import { queryKeys } from '../../lib/queryKeys';
 import { MainStackParamList } from '../../navigation/MainNavigator';
-import type { Tables } from '../../types/database';
 import { useQueryClient } from '@tanstack/react-query';
+import { fetchUserProfile } from '../../lib/profileApi';
+import type { DevotionalWithEngagement } from '../../lib/profileApi';
+import { pickAndUploadAvatar, showAvatarSourceOptions, updateProfileAvatar } from '../../lib/avatarUpload';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const GRID_PADDING = 20;
@@ -29,192 +31,6 @@ const GRID_GAP = 2;
 const IMAGE_SIZE = (SCREEN_WIDTH - GRID_PADDING * 2 - GRID_GAP * 2) / 3;
 
 type ProfileScreenRouteProp = RouteProp<MainStackParamList, 'Profile'>;
-
-interface DevotionalWithEngagement extends Tables<'devotionals'> {
-  profiles: Tables<'profiles'>;
-  likes_count: number;
-  comments_count: number;
-}
-
-interface UserProfileData {
-  profile: Tables<'profiles'>;
-  isSameGroup: boolean;
-  stats: {
-    totalDevotionals: number;
-    totalPrayers: number;
-    currentStreak: number;
-    contributionScore: number;
-    totalLikes: number;
-    totalComments: number;
-  };
-  devotionals: DevotionalWithEngagement[];
-  prayers: Array<Tables<'prayers'> & { profiles: Tables<'profiles'> }>;
-}
-
-// Fetch user profile data
-const fetchUserProfile = async (
-  userId: string,
-  currentGroupId: string,
-  currentUserId: string
-): Promise<UserProfileData | null> => {
-  // 1. Fetch profile
-  const { data: profile, error: profileError } = await supabase
-    .from('profiles')
-    .select('*')
-    .eq('id', userId)
-    .single();
-
-  if (profileError || !profile) {
-    throw new Error('Profile not found');
-  }
-
-  // 2. Check if user is in same group
-  const { data: groupMember, error: groupError } = await supabase
-    .from('group_members')
-    .select('user_id')
-    .eq('group_id', currentGroupId)
-    .eq('user_id', userId)
-    .maybeSingle();
-
-  if (groupError) {
-    throw new Error('Failed to verify group membership');
-  }
-
-  const isSameGroup = !!groupMember;
-
-  if (!isSameGroup) {
-    // Return limited data if not in same group
-    return {
-      profile,
-      isSameGroup: false,
-      stats: {
-        totalDevotionals: 0,
-        totalPrayers: 0,
-        currentStreak: 0,
-        contributionScore: 0,
-        totalLikes: 0,
-        totalComments: 0,
-      },
-      devotionals: [],
-      prayers: [],
-    };
-  }
-
-  // 3. Fetch devotionals (all-time, current group only)
-  const { data: devotionalsData } = await supabase
-    .from('devotionals')
-    .select('*, profiles(*)')
-    .eq('user_id', userId)
-    .eq('group_id', currentGroupId)
-    .not('image_url', 'is', null)
-    .order('created_at', { ascending: false });
-
-  const devotionals = devotionalsData || [];
-
-  // 4. Fetch prayers (all-time, current group only)
-  const { data: prayersData } = await supabase
-    .from('prayers')
-    .select('*, profiles(*)')
-    .eq('user_id', userId)
-    .eq('group_id', currentGroupId)
-    .order('created_at', { ascending: false });
-
-  const prayers = prayersData || [];
-
-  // 5. Fetch devotional comments count (comments BY the user in the current group)
-  const { count: commentsCount = 0 } = await supabase
-    .from('devotional_comments')
-    .select('id', { count: 'exact', head: true })
-    .eq('user_id', userId)
-    .in(
-      'devotional_id',
-      // Get all devotional IDs from the current group
-      (await supabase
-        .from('devotionals')
-        .select('id')
-        .eq('group_id', currentGroupId)
-        .then(({ data }) => (data || []).map((d) => d.id)))
-    );
-
-  // 6. Get user's devotional IDs for fetching likes/comments received
-  const userDevotionalIds = devotionals.map((d) => d.id);
-
-  // 7. Fetch likes and comments for each devotional
-  let devotionalsWithEngagement: DevotionalWithEngagement[] = [];
-  let totalLikes = 0;
-  let totalCommentsReceived = 0;
-
-  if (userDevotionalIds.length > 0) {
-    // Fetch all likes for user's devotionals
-    const { data: likesData } = await supabase
-      .from('devotional_likes')
-      .select('devotional_id')
-      .in('devotional_id', userDevotionalIds);
-
-    // Fetch all comments for user's devotionals
-    const { data: commentsData } = await supabase
-      .from('devotional_comments')
-      .select('devotional_id')
-      .in('devotional_id', userDevotionalIds);
-
-    // Count likes per devotional
-    const likesMap = new Map<string, number>();
-    (likesData || []).forEach((like) => {
-      likesMap.set(like.devotional_id, (likesMap.get(like.devotional_id) || 0) + 1);
-    });
-
-    // Count comments per devotional
-    const commentsMap = new Map<string, number>();
-    (commentsData || []).forEach((comment) => {
-      commentsMap.set(comment.devotional_id, (commentsMap.get(comment.devotional_id) || 0) + 1);
-    });
-
-    // Combine data
-    devotionalsWithEngagement = devotionals.map((d) => ({
-      ...d,
-      likes_count: likesMap.get(d.id) || 0,
-      comments_count: commentsMap.get(d.id) || 0,
-    }));
-
-    totalLikes = likesData?.length || 0;
-    totalCommentsReceived = commentsData?.length || 0;
-  } else {
-    devotionalsWithEngagement = devotionals.map((d) => ({
-      ...d,
-      likes_count: 0,
-      comments_count: 0,
-    }));
-  }
-
-  // 8. Fetch user streak
-  const { data: streakData } = await supabase
-    .from('user_streaks')
-    .select('current_streak')
-    .eq('user_id', userId)
-    .eq('group_id', currentGroupId)
-    .maybeSingle();
-
-  const currentStreak = streakData?.current_streak || 0;
-
-  // Calculate contribution score: 5 * devotionals + 2 * prayers + 2 * comments
-  const contributionScore =
-    devotionals.length * 5 + prayers.length * 2 + (commentsCount || 0) * 2;
-
-  return {
-    profile,
-    isSameGroup: true,
-    stats: {
-      totalDevotionals: devotionals.length,
-      totalPrayers: prayers.length,
-      currentStreak,
-      contributionScore,
-      totalLikes,
-      totalComments: totalCommentsReceived,
-    },
-    devotionals: devotionalsWithEngagement,
-    prayers: prayers as any,
-  };
-};
 
 export const ProfileScreen: React.FC = () => {
   const { colors, isDark } = useTheme();
@@ -232,7 +48,7 @@ export const ProfileScreen: React.FC = () => {
   const [prayerFilter, setPrayerFilter] = useState<'Praying' | 'Answered'>('Praying');
   const [showPrayerFilterMenu, setShowPrayerFilterMenu] = useState(false);
 
-  // Fetch profile data
+  // Fetch profile data with optimized caching
   const {
     data: profileData,
     isLoading,
@@ -242,8 +58,12 @@ export const ProfileScreen: React.FC = () => {
     queryKey: queryKeys.profile.detail(userId),
     queryFn: () => fetchUserProfile(userId, currentGroup?.id || '', currentUserId || ''),
     enabled: !!userId && !!currentGroup?.id && !!currentUserId,
-    staleTime: 2 * 60 * 1000, // 2 minutes
+    staleTime: 5 * 60 * 1000, // 5 minutes - profile data doesn't change often
+    gcTime: 15 * 60 * 1000, // 15 minutes - keep in cache longer
+    retry: 2, // Retry failed requests twice
+    retryDelay: 1000, // Wait 1s between retries
   });
+
 
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
@@ -252,6 +72,124 @@ export const ProfileScreen: React.FC = () => {
       day: 'numeric',
       year: 'numeric',
     });
+  };
+
+  const handleAvatarPress = async () => {
+    if (!isOwnProfile || !currentUserId) return;
+
+    // Show options: Camera, Library, or Remove (if avatar exists)
+    const hasAvatar = profileData?.profile?.avatar_url;
+    
+    Alert.alert(
+      'Profile Picture',
+      'Choose an option',
+      [
+        {
+          text: 'Camera',
+          onPress: () => handleUploadAvatar('camera'),
+        },
+        {
+          text: 'Photo Library',
+          onPress: () => handleUploadAvatar('library'),
+        },
+        ...(hasAvatar ? [{
+          text: 'Remove Photo',
+          style: 'destructive' as const,
+          onPress: handleRemoveAvatar,
+        }] : []),
+        {
+          text: 'Cancel',
+          style: 'cancel' as const,
+        },
+      ]
+    );
+  };
+
+  const handleUploadAvatar = async (source: 'camera' | 'library') => {
+    if (!currentUserId) return;
+
+    try {
+      const result = await pickAndUploadAvatar(currentUserId, source);
+      
+      if (result.success && result.avatarUrl) {
+        // Update profile with new avatar
+        const updateResult = await updateProfileAvatar(currentUserId, result.avatarUrl);
+        
+        if (updateResult.success) {
+          // Immediately update the store profile and group members
+          const { fetchProfile, fetchGroupMembers } = useAppStore.getState();
+          await Promise.all([
+            fetchProfile(),
+            fetchGroupMembers(),
+          ]);
+          
+          // Force refetch this profile screen
+          await refetch();
+          
+          // Aggressively clear all related caches and force refetch
+          await Promise.all([
+            queryClient.invalidateQueries({ queryKey: queryKeys.profile.all, refetchType: 'all' }),
+            queryClient.invalidateQueries({ queryKey: queryKeys.devotionals.all, refetchType: 'all' }),
+            queryClient.invalidateQueries({ queryKey: queryKeys.groups.all, refetchType: 'all' }),
+          ]);
+          
+          // Force immediate refetch of active queries
+          await Promise.all([
+            queryClient.refetchQueries({ queryKey: queryKeys.profile.all, type: 'active' }),
+            queryClient.refetchQueries({ queryKey: queryKeys.devotionals.all, type: 'active' }),
+            queryClient.refetchQueries({ queryKey: queryKeys.groups.all, type: 'active' }),
+          ]);
+          
+          Alert.alert('Success', 'Profile picture updated!');
+        } else {
+          Alert.alert('Error', updateResult.error || 'Failed to update profile');
+        }
+      } else {
+        Alert.alert('Error', result.error || 'Failed to upload avatar');
+      }
+    } catch (error) {
+      Alert.alert('Error', 'Failed to update profile picture');
+    }
+  };
+
+  const handleRemoveAvatar = async () => {
+    if (!currentUserId) return;
+
+    try {
+      const updateResult = await updateProfileAvatar(currentUserId, null);
+      
+      if (updateResult.success) {
+        // Immediately update the store profile and group members
+        const { fetchProfile, fetchGroupMembers } = useAppStore.getState();
+        await Promise.all([
+          fetchProfile(),
+          fetchGroupMembers(),
+        ]);
+        
+        // Force refetch this profile screen
+        await refetch();
+        
+        // Aggressively clear all related caches and force refetch
+        await Promise.all([
+          queryClient.invalidateQueries({ queryKey: queryKeys.profile.all, refetchType: 'all' }),
+          queryClient.invalidateQueries({ queryKey: queryKeys.devotionals.all, refetchType: 'all' }),
+          queryClient.invalidateQueries({ queryKey: queryKeys.groups.all, refetchType: 'all' }),
+        ]);
+        
+        // Force immediate refetch of active queries
+        await Promise.all([
+          queryClient.refetchQueries({ queryKey: queryKeys.profile.all, type: 'active' }),
+          queryClient.refetchQueries({ queryKey: queryKeys.devotionals.all, type: 'active' }),
+          queryClient.refetchQueries({ queryKey: queryKeys.groups.all, type: 'active' }),
+        ]);
+        
+        Alert.alert('Success', 'Profile picture removed');
+      } else {
+        Alert.alert('Error', updateResult.error || 'Failed to remove profile picture');
+      }
+    } catch (error) {
+      Alert.alert('Error', 'Failed to remove profile picture');
+    }
   };
 
   if (isLoading) {
@@ -264,13 +202,29 @@ export const ProfileScreen: React.FC = () => {
           <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
             <Ionicons name="chevron-back" size={28} color={colors.text} />
           </TouchableOpacity>
-        </View>
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={isDark ? '#3D5A50' : colors.primary} />
-          <Text style={[styles.loadingText, { color: colors.textMuted }]}>
-            Loading profile...
+          <Text style={[styles.headerTitle, { color: colors.text }]}>
+            {isOwnProfile ? 'My Profile' : 'Profile'}
           </Text>
+          {isOwnProfile ? (
+            <TouchableOpacity
+              onPress={() => navigation.navigate('Settings')}
+              style={styles.settingsButton}
+              accessibilityRole="button"
+              accessibilityLabel="Open settings"
+            >
+              <Ionicons name="settings-outline" size={24} color={colors.text} />
+            </TouchableOpacity>
+          ) : (
+            <View style={{ width: 28 }} />
+          )}
         </View>
+        <ScrollView
+          style={styles.scrollView}
+          contentContainerStyle={styles.content}
+          showsVerticalScrollIndicator={false}
+        >
+          <ProfileSkeleton />
+        </ScrollView>
       </SafeAreaView>
     );
   }
@@ -355,7 +309,18 @@ export const ProfileScreen: React.FC = () => {
       >
         {/* Profile Section */}
         <View style={styles.profileSection}>
-          <Avatar name={profile.full_name} imageUrl={profile.avatar_url} size={100} />
+          <Avatar 
+            name={profile.full_name} 
+            imageUrl={profile.avatar_url} 
+            size={100}
+            onPress={isOwnProfile ? handleAvatarPress : undefined}
+            backgroundColor={colors.primary}
+          />
+          {isOwnProfile && (
+            <Text style={[styles.avatarHint, { color: colors.textMuted }]}>
+              Tap to change photo
+            </Text>
+          )}
           <Text style={[styles.profileName, { color: colors.text }]}>
             {profile.full_name || 'User'}
           </Text>
@@ -410,60 +375,57 @@ export const ProfileScreen: React.FC = () => {
           />
         </View>
 
-        {/* Content based on selected tab */}
-        {selectedTab === 'Devotionals' ? (
-          // Devotionals Grid - Instagram style
-          <View style={styles.gridSection}>
-            {devotionals.length === 0 ? (
-              <View style={styles.emptyGridState}>
-                <Ionicons name="images-outline" size={48} color={colors.textMuted} />
-                <Text style={[styles.emptyText, { color: colors.textMuted }]}>
-                  No devotionals yet
-                </Text>
-              </View>
-            ) : (
-              <View style={styles.grid}>
-                {devotionals.map((devotional, index) => (
-                  <TouchableOpacity
-                    key={devotional.id}
-                    style={styles.gridItem}
-                    onPress={() =>
-                      navigation.navigate('UserDevotionalsList', {
-                        userId: userId,
-                        userName: profile.full_name || 'User',
-                        initialDevotionalId: devotional.id,
-                      })
-                    }
-                    activeOpacity={0.9}
-                  >
-                    <Image
-                      source={{ uri: devotional.image_url || '' }}
-                      style={styles.gridImage}
-                      resizeMode="cover"
-                    />
-                    {/* Engagement stats in top right */}
-                    <View style={styles.gridOverlay}>
-                      {devotional.likes_count > 0 && (
-                        <View style={styles.gridStat}>
-                          <Ionicons name="heart" size={14} color="#FFFFFF" />
-                          <Text style={styles.gridStatText}>{devotional.likes_count}</Text>
-                        </View>
-                      )}
-                      {devotional.comments_count > 0 && (
-                        <View style={styles.gridStat}>
-                          <Ionicons name="chatbubble" size={14} color="#FFFFFF" />
-                          <Text style={styles.gridStatText}>{devotional.comments_count}</Text>
-                        </View>
-                      )}
-                    </View>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            )}
-          </View>
-        ) : (
-          // Prayers List
-          <View style={styles.section}>
+        {/* Content based on selected tab - both kept mounted so Devotionals images stay cached when switching tabs */}
+        <View style={[styles.gridSection, selectedTab !== 'Devotionals' && styles.tabHidden]}>
+          {devotionals.length === 0 ? (
+            <View style={styles.emptyGridState}>
+              <Ionicons name="images-outline" size={48} color={colors.textMuted} />
+              <Text style={[styles.emptyText, { color: colors.textMuted }]}>
+                No devotionals yet
+              </Text>
+            </View>
+          ) : (
+            <View style={styles.grid}>
+              {devotionals.map((devotional) => (
+                <TouchableOpacity
+                  key={devotional.id}
+                  style={styles.gridItem}
+                  onPress={() =>
+                    navigation.navigate('UserDevotionalsList', {
+                      userId: userId,
+                      userName: profile.full_name || 'User',
+                      initialDevotionalId: devotional.id,
+                    })
+                  }
+                  activeOpacity={0.9}
+                >
+                  <Image
+                    source={{ uri: devotional.image_url || '' }}
+                    style={styles.gridImage}
+                    resizeMode="cover"
+                  />
+                  {/* Engagement stats in top right */}
+                  <View style={styles.gridOverlay}>
+                    {devotional.likes_count > 0 && (
+                      <View style={styles.gridStat}>
+                        <Ionicons name="heart" size={14} color="#FFFFFF" />
+                        <Text style={styles.gridStatText}>{devotional.likes_count}</Text>
+                      </View>
+                    )}
+                    {devotional.comments_count > 0 && (
+                      <View style={styles.gridStat}>
+                        <Ionicons name="chatbubble" size={14} color="#FFFFFF" />
+                        <Text style={styles.gridStatText}>{devotional.comments_count}</Text>
+                      </View>
+                    )}
+                  </View>
+                </TouchableOpacity>
+              ))}
+            </View>
+          )}
+        </View>
+
+        <View style={[styles.section, selectedTab !== 'Prayers' && styles.tabHidden]}>
             {/* Prayer Filter Button */}
             <View style={styles.prayerFilterHeader}>
               <Text style={[styles.filterLabel, { color: colors.textMuted }]}>
@@ -550,7 +512,6 @@ export const ProfileScreen: React.FC = () => {
               );
             })()}
           </View>
-        )}
       </ScrollView>
 
       {/* Prayer Filter Menu Modal */}
@@ -661,6 +622,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 24,
   },
+  avatarHint: {
+    fontSize: 12,
+    marginTop: 8,
+    textAlign: 'center',
+  },
   profileName: {
     fontSize: 24,
     fontWeight: '700',
@@ -693,6 +659,9 @@ const styles = StyleSheet.create({
   toggleContainer: {
     marginBottom: 20,
   },
+  tabHidden: {
+    display: 'none', // Keeps tab content mounted so Devotionals images stay cached when switching to Prayers and back
+  },
   gridSection: {
     flex: 1,
   },
@@ -715,6 +684,7 @@ const styles = StyleSheet.create({
     width: '100%',
     height: '100%',
     backgroundColor: '#E8E7E2',
+    borderRadius: 2,
   },
   gridOverlay: {
     position: 'absolute',
