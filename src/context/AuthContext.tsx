@@ -76,10 +76,16 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
         if (sessionError) {
           console.error('Error getting session:', sessionError);
-          // Continue without session - user will see login screen
-          // setSession(null) will set isGroupChecked=true since there's no session
-          setSession(null);
-          // Still need to clear loading state
+          // Invalid/expired refresh token: clear stored session so user can sign in again
+          const isInvalidRefreshToken =
+            sessionError?.message?.includes('Refresh Token') ||
+            sessionError?.message?.includes('refresh_token');
+          if (isInvalidRefreshToken) {
+            console.log('Clearing invalid refresh token (signing out locally)');
+            await storeSignOut();
+          } else {
+            setSession(null);
+          }
           setLoading(false);
           isInitializing.current = false;
           hasInitialized.current = true;
