@@ -10,9 +10,11 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useFocusEffect } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import type { MainStackParamList } from '../../navigation/MainNavigator';
 import { Ionicons } from '@expo/vector-icons';
-import { startOfWeek } from 'date-fns';
+import { startOfDay, startOfWeek, isAfter } from 'date-fns';
 import { useTheme } from '../../theme/ThemeContext';
 import { Card, Header } from '../../components';
 import { useAppStore } from '../../store/useAppStore';
@@ -31,6 +33,7 @@ import { useDevotionalsRealtime } from '../../hooks/useRealtimeSubscription';
 export const DevotionalsScreen: React.FC = () => {
   const { colors, isDark } = useTheme();
   const { session } = useAppStore();
+  const navigation = useNavigation<NativeStackNavigationProp<MainStackParamList>>();
 
   // State
   const [weekStart, setWeekStart] = useState(() =>
@@ -67,6 +70,7 @@ export const DevotionalsScreen: React.FC = () => {
   } = useDevotionals(selectedDate);
 
   const currentUserId = session?.user?.id || '';
+  const isFutureDay = isAfter(startOfDay(selectedDate), startOfDay(new Date()));
 
   // Note: Removed useFocusEffect that was forcing refresh on every focus
   // The hook now has built-in caching, so data will only refresh when needed
@@ -76,6 +80,10 @@ export const DevotionalsScreen: React.FC = () => {
   const handleMemberStoryPress = (memberId: string) => {
     setStoryViewerStartMember(memberId);
     setShowStoryViewer(true);
+  };
+
+  const handleMemberProfilePress = (memberId: string) => {
+    navigation.navigate('Profile', { userId: memberId });
   };
 
   const handleAddDevotional = async (imageUri: string) => {
@@ -130,13 +138,6 @@ export const DevotionalsScreen: React.FC = () => {
         }
         showsVerticalScrollIndicator={false}
       >
-        {/* Loading indicator (non-blocking) */}
-        {loading && !refreshing && (
-          <View style={styles.loadingOverlay}>
-            <ActivityIndicator size="small" color={isDark ? '#3D5A50' : colors.primary} />
-          </View>
-        )}
-
         {/* Week/Day Picker */}
         <WeekDayPicker
           weekStart={weekStart}
@@ -161,6 +162,7 @@ export const DevotionalsScreen: React.FC = () => {
               currentUserId={currentUserId}
               currentUserHasPosted={currentUserHasPosted}
               onMemberPress={handleMemberStoryPress}
+              onMemberProfilePress={handleMemberProfilePress}
               onAddPress={() => setShowAddSheet(true)}
             />
           </View>
@@ -173,9 +175,11 @@ export const DevotionalsScreen: React.FC = () => {
         )}
 
         {/* Daily Devotional Card */}
-        <View style={styles.section}>
-          <DailyDevotionalCard />
-        </View>
+        {!isFutureDay && (
+          <View style={styles.section}>
+            <DailyDevotionalCard selectedDate={selectedDate} />
+          </View>
+        )}
 
         {/* Submissions Feed */}
         <View style={styles.feedSection}>

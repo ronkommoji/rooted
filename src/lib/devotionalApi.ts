@@ -2,6 +2,7 @@
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { AppState } from 'react-native';
+import { supabase } from './supabase';
 
 export interface DailyDevotionalResponse {
   title: string;
@@ -26,13 +27,11 @@ export interface DailyDevotionalResponse {
 const DEVOTIONAL_API_BASE_URL = 'https://devotional-api.vercel.app';
 
 // Cache keys for persistent storage
-const DEVOTIONAL_CACHE_KEY = '@rooted:daily_devotional';
-const DEVOTIONAL_CACHE_DATE_KEY = '@rooted:daily_devotional_date';
+const DEVOTIONAL_CACHE_KEY_PREFIX = '@rooted:daily_devotional:';
 
-// In-memory cache for today's devotional (same for all users)
-let cachedDevotional: DailyDevotionalResponse | null = null;
-let cachedDate: string | null = null;
-let fetchPromise: Promise<DailyDevotionalResponse | null> | null = null;
+// In-memory cache for devotionals by date (same for all users)
+const cachedDevotionals = new Map<string, DailyDevotionalResponse>();
+const fetchPromises = new Map<string, Promise<DailyDevotionalResponse | null>>();
 
 /**
  * Get today's date string in YYYY-MM-DD format
@@ -45,20 +44,13 @@ const getTodayDateString = (): string => {
 /**
  * Load cached devotional from persistent storage
  */
-const loadCachedDevotional = async (): Promise<DailyDevotionalResponse | null> => {
+const loadCachedDevotional = async (date: string): Promise<DailyDevotionalResponse | null> => {
   try {
-    const cachedDateStr = await AsyncStorage.getItem(DEVOTIONAL_CACHE_DATE_KEY);
-    const today = getTodayDateString();
-    
-    if (cachedDateStr === today) {
-      const cachedData = await AsyncStorage.getItem(DEVOTIONAL_CACHE_KEY);
-      if (cachedData) {
-        const parsed = JSON.parse(cachedData) as DailyDevotionalResponse;
-        // Also update in-memory cache
-        cachedDevotional = parsed;
-        cachedDate = today;
-        return parsed;
-      }
+    const cachedData = await AsyncStorage.getItem(`${DEVOTIONAL_CACHE_KEY_PREFIX}${date}`);
+    if (cachedData) {
+      const parsed = JSON.parse(cachedData) as DailyDevotionalResponse;
+      cachedDevotionals.set(date, parsed);
+      return parsed;
     }
   } catch (error) {
     console.error('Error reading devotional cache:', error);
@@ -71,75 +63,101 @@ const loadCachedDevotional = async (): Promise<DailyDevotionalResponse | null> =
  */
 const saveCachedDevotional = async (data: DailyDevotionalResponse, date: string): Promise<void> => {
   try {
-    await AsyncStorage.setItem(DEVOTIONAL_CACHE_KEY, JSON.stringify(data));
-    await AsyncStorage.setItem(DEVOTIONAL_CACHE_DATE_KEY, date);
+    await AsyncStorage.setItem(`${DEVOTIONAL_CACHE_KEY_PREFIX}${date}`, JSON.stringify(data));
   } catch (error) {
     console.error('Error saving devotional cache:', error);
   }
 };
 
 /**
- * Fetch today's devotional from the API with caching (in-memory and persistent)
+ * Fetch a devotional for a specific date with caching (Supabase + local)
  */
-export const fetchTodayDevotional = async (): Promise<DailyDevotionalResponse | null> => {
+export const fetchDevotionalByDate = async (date: string): Promise<DailyDevotionalResponse | null> => {
   const today = getTodayDateString();
-  
-  // Return in-memory cached data if it's for today
-  if (cachedDevotional && cachedDate === today) {
-    return cachedDevotional;
+
+  if (cachedDevotionals.has(date)) {
+    return cachedDevotionals.get(date) || null;
   }
-  
-  // Try to load from persistent cache
-  const persistentCache = await loadCachedDevotional();
+
+  const persistentCache = await loadCachedDevotional(date);
   if (persistentCache) {
     return persistentCache;
   }
-  
-  // If there's already a fetch in progress, return that promise
-  if (fetchPromise) {
-    return fetchPromise;
+
+  const existingPromise = fetchPromises.get(date);
+  if (existingPromise) {
+    return existingPromise;
   }
-  
-  // Start new fetch
-  fetchPromise = (async () => {
+
+  const fetchPromise = (async () => {
     try {
-      const url = `${DEVOTIONAL_API_BASE_URL}/today`;
-      
+      const { data: cachedRow, error: cacheError } = await supabase
+        .from('daily_devotionals')
+        .select('data')
+        .eq('date', date)
+        .single();
+
+      if (cacheError && cacheError.code !== 'PGRST116') {
+        console.error('Error fetching devotional cache:', cacheError);
+      }
+
+      if (cachedRow?.data) {
+        const cachedData = cachedRow.data as DailyDevotionalResponse;
+        cachedDevotionals.set(date, cachedData);
+        await saveCachedDevotional(cachedData, date);
+        return cachedData;
+      }
+
+      const url = date === today
+        ? `${DEVOTIONAL_API_BASE_URL}/today`
+        : `${DEVOTIONAL_API_BASE_URL}/date/${date}`;
+
       const response = await fetch(url);
-      
+
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
-      
+
       const data: DailyDevotionalResponse = await response.json();
-      
-      // Cache the result in memory
-      cachedDevotional = data;
-      cachedDate = today;
-      
-      // Save to persistent storage
-      await saveCachedDevotional(data, today);
-      
+
+      cachedDevotionals.set(date, data);
+      await saveCachedDevotional(data, date);
+
+      const { error: insertError } = await supabase
+        .from('daily_devotionals')
+        .upsert({ date, data }, { onConflict: 'date' });
+
+      if (insertError) {
+        console.error('Error saving devotional cache:', insertError);
+      }
+
       return data;
     } catch (error) {
       console.error('Error fetching daily devotional:', error);
       return null;
     } finally {
-      // Clear the promise so we can fetch again if needed
-      fetchPromise = null;
+      fetchPromises.delete(date);
     }
   })();
-  
+
+  fetchPromises.set(date, fetchPromise);
   return fetchPromise;
+};
+
+/**
+ * Fetch today's devotional from the API with caching (fast-path)
+ */
+export const fetchTodayDevotional = async (): Promise<DailyDevotionalResponse | null> => {
+  const today = getTodayDateString();
+  return fetchDevotionalByDate(today);
 };
 
 /**
  * Clear the in-memory cache (useful when app backgrounds)
  */
 export const clearDevotionalCache = (): void => {
-  cachedDevotional = null;
-  cachedDate = null;
-  fetchPromise = null;
+  cachedDevotionals.clear();
+  fetchPromises.clear();
 };
 
 /**

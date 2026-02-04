@@ -12,17 +12,20 @@ interface DailyDevotionalCardProps {
   onScripturePress?: () => void;
   onDevotionalPress?: () => void;
   onPrayerPress?: () => void;
+  selectedDate?: Date;
 }
 
 export const DailyDevotionalCard: React.FC<DailyDevotionalCardProps> = ({
   onScripturePress,
   onDevotionalPress,
   onPrayerPress,
+  selectedDate,
 }) => {
   const { colors, isDark } = useTheme();
   const navigation = useNavigation<any>();
   const isFocused = useIsFocused();
-  const { devotional, completion, loading, refresh } = useDailyDevotional();
+  const selectedDateString = selectedDate ? format(selectedDate, 'yyyy-MM-dd') : undefined;
+  const { devotional, completion, loading, refresh } = useDailyDevotional(selectedDateString);
 
   // Note: Removed useFocusEffect that was forcing refresh on every focus
   // The hook now has built-in caching, so data will only refresh when needed
@@ -119,7 +122,7 @@ export const DailyDevotionalCard: React.FC<DailyDevotionalCardProps> = ({
     if (onScripturePress) {
       onScripturePress();
     } else {
-      navigation.navigate('ScriptureDetail');
+      navigation.navigate('ScriptureDetail', { date: selectedDateString });
     }
   };
 
@@ -127,7 +130,7 @@ export const DailyDevotionalCard: React.FC<DailyDevotionalCardProps> = ({
     if (onDevotionalPress) {
       onDevotionalPress();
     } else {
-      navigation.navigate('DevotionalDetail');
+      navigation.navigate('DevotionalDetail', { date: selectedDateString });
     }
   };
 
@@ -135,7 +138,7 @@ export const DailyDevotionalCard: React.FC<DailyDevotionalCardProps> = ({
     if (onPrayerPress) {
       onPrayerPress();
     } else {
-      navigation.navigate('PrayerDetail');
+      navigation.navigate('PrayerDetail', { date: selectedDateString });
     }
   };
 

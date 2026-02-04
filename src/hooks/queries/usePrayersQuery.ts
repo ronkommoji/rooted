@@ -225,7 +225,7 @@ export const useIncrementPrayerCountMutation = () => {
     mutationFn: async (prayerId: string) => {
       // Use RPC function for atomic increment
       const { data, error } = await supabase.rpc('increment_prayer_count', {
-        prayer_id: prayerId,
+        prayer_id_param: prayerId,
       });
 
       if (error) throw error;

@@ -1,8 +1,8 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { format } from 'date-fns';
+import { format, isAfter, parseISO } from 'date-fns';
 import { supabase } from '../../../lib/supabase';
 import { useAppStore } from '../../../store/useAppStore';
-import { fetchTodayDevotional, DailyDevotionalResponse } from '../../../lib/devotionalApi';
+import { fetchDevotionalByDate, DailyDevotionalResponse } from '../../../lib/devotionalApi';
 import { notifyDailyDevotionalCompletion } from '../../../lib/dailyDevotionalEvents';
 
 export interface DailyDevotionalCompletion {
@@ -17,7 +17,7 @@ interface CompletionCacheEntry {
   updatedAt: number;
 }
 
-let globalCompletionCache: CompletionCacheEntry | null = null;
+let globalCompletionCache: Record<string, CompletionCacheEntry> = {};
 const completionSubscribers = new Set<(entry: CompletionCacheEntry) => void>();
 const refreshSubscribers = new Set<() => Promise<void>>();
 
@@ -58,7 +58,7 @@ const COMPLETION_CACHE_DURATION_MS = 30 * 1000;
 const isFullyCompleted = (data: DailyDevotionalCompletion) =>
   data.scripture_completed && data.devotional_completed && data.prayer_completed;
 
-export const useDailyDevotional = (): UseDailyDevotionalReturn => {
+export const useDailyDevotional = (date?: string): UseDailyDevotionalReturn => {
   const { currentGroup, session } = useAppStore();
   
   const [devotional, setDevotional] = useState<DailyDevotionalResponse | null>(null);
@@ -68,13 +68,12 @@ export const useDailyDevotional = (): UseDailyDevotionalReturn => {
   const completionRef = useRef<DailyDevotionalCompletion | null>(null);
 
   // Cache tracking
-  const lastDevotionalFetch = useRef<number>(0);
-  const lastCompletionFetch = useRef<number>(0);
-  const cachedDate = useRef<string>('');
-  const cachedDevotional = useRef<DailyDevotionalResponse | null>(null);
-  const cachedCompletion = useRef<DailyDevotionalCompletion | null>(null);
+  const devotionalCache = useRef<Record<string, { data: DailyDevotionalResponse; fetchedAt: number }>>({});
+  const completionCache = useRef<Record<string, { data: DailyDevotionalCompletion; fetchedAt: number }>>({});
 
   const today = format(new Date(), 'yyyy-MM-dd');
+  const targetDate = date ?? today;
+  const isFutureDate = isAfter(parseISO(targetDate), parseISO(today));
   const currentUserId = session?.user?.id;
   const currentGroupId = currentGroup?.id;
 
@@ -91,18 +90,18 @@ export const useDailyDevotional = (): UseDailyDevotionalReturn => {
 
   const updateGlobalCompletionCache = useCallback((data: DailyDevotionalCompletion) => {
     const entry: CompletionCacheEntry = {
-      date: today,
+      date: targetDate,
       data,
       updatedAt: Date.now(),
     };
-    globalCompletionCache = entry;
+    globalCompletionCache[targetDate] = entry;
     notifyCompletionSubscribers(entry);
-  }, [today]);
+  }, [targetDate]);
 
-  // Fetch today's devotional from API
+  // Fetch devotional for target date from API/cache
   const fetchDevotional = useCallback(async (): Promise<DailyDevotionalResponse | null> => {
     try {
-      const data = await fetchTodayDevotional();
+      const data = await fetchDevotionalByDate(targetDate);
       if (data) {
         setDevotional(data);
         setError(null);
@@ -116,7 +115,7 @@ export const useDailyDevotional = (): UseDailyDevotionalReturn => {
       setError('Failed to fetch daily devotional');
       return null;
     }
-  }, []);
+  }, [targetDate]);
 
   // Fetch completion status from database
   const fetchCompletion = useCallback(async (): Promise<DailyDevotionalCompletion | null> => {
@@ -133,7 +132,7 @@ export const useDailyDevotional = (): UseDailyDevotionalReturn => {
         .select('scripture_completed, devotional_completed, prayer_completed')
         .eq('user_id', currentUserId)
         .eq('group_id', currentGroupId)
-        .eq('date', today)
+        .eq('date', targetDate)
         .single();
 
       if (fetchError && fetchError.code !== 'PGRST116') { // PGRST116 is "not found"
@@ -172,88 +171,93 @@ export const useDailyDevotional = (): UseDailyDevotionalReturn => {
       updateGlobalCompletionCache(defaultCompletion);
       return defaultCompletion;
     }
-  }, [currentUserId, currentGroupId, today, getDefaultCompletion, setCompletionState, updateGlobalCompletionCache]);
+  }, [currentUserId, currentGroupId, targetDate, getDefaultCompletion, setCompletionState, updateGlobalCompletionCache]);
 
   // Initialize: fetch both devotional and completion with caching
   useEffect(() => {
     const initialize = async () => {
-      const now = Date.now();
-      const dateChanged = cachedDate.current !== today;
-
-      if (globalCompletionCache?.date === today) {
-        cachedCompletion.current = globalCompletionCache.data;
-        lastCompletionFetch.current = globalCompletionCache.updatedAt;
-      }
-      
-      // Check if we need to fetch devotional (date changed or cache expired)
-      const shouldFetchDevotional = dateChanged || 
-        (now - lastDevotionalFetch.current > DEVOTIONAL_CACHE_DURATION_MS) ||
-        !cachedDevotional.current;
-      
-      // Check if we need to fetch completion (date changed, cache expired, or missing)
-      const shouldFetchCompletion = dateChanged ||
-        (now - lastCompletionFetch.current > COMPLETION_CACHE_DURATION_MS) ||
-        !cachedCompletion.current;
-      
-      // If we have cached data and don't need to fetch, show it immediately WITHOUT loading
-      if (!shouldFetchDevotional && !shouldFetchCompletion && cachedDevotional.current) {
-        setDevotional(cachedDevotional.current);
-        if (cachedCompletion.current) {
-          setCompletionState(cachedCompletion.current);
-        }
+      if (isFutureDate) {
+        setDevotional(null);
+        setError(null);
+        setCompletionState(getDefaultCompletion());
         setLoading(false);
-        cachedDate.current = today;
-        // Still refresh in background to ensure data is fresh
-        if (dateChanged) {
-          // Only refresh if date changed
-          fetchDevotional();
-          fetchCompletion();
-        }
         return;
       }
-      
-      // Only show loading if we actually need to fetch
+
+      const now = Date.now();
+      const globalEntry = globalCompletionCache[targetDate];
+      if (globalEntry) {
+        completionCache.current[targetDate] = {
+          data: globalEntry.data,
+          fetchedAt: globalEntry.updatedAt,
+        };
+      }
+
+      const cachedDevotionalEntry = devotionalCache.current[targetDate];
+      const cachedCompletionEntry = completionCache.current[targetDate];
+
+      const shouldFetchDevotional =
+        !cachedDevotionalEntry ||
+        now - cachedDevotionalEntry.fetchedAt > DEVOTIONAL_CACHE_DURATION_MS;
+
+      const shouldFetchCompletion =
+        !cachedCompletionEntry ||
+        now - cachedCompletionEntry.fetchedAt > COMPLETION_CACHE_DURATION_MS;
+
+      if (!shouldFetchDevotional && !shouldFetchCompletion && cachedDevotionalEntry) {
+        setDevotional(cachedDevotionalEntry.data);
+        if (cachedCompletionEntry) {
+          setCompletionState(cachedCompletionEntry.data);
+        }
+        setLoading(false);
+        return;
+      }
+
       if (shouldFetchDevotional || shouldFetchCompletion) {
         setLoading(true);
       }
-      
-      // Fetch devotional if needed
+
       if (shouldFetchDevotional) {
         const data = await fetchDevotional();
         if (data) {
-          cachedDevotional.current = data;
+          devotionalCache.current[targetDate] = { data, fetchedAt: now };
         }
-        lastDevotionalFetch.current = now;
-        cachedDate.current = today;
-      } else if (cachedDevotional.current) {
-        // Use cached devotional immediately
-        setDevotional(cachedDevotional.current);
+      } else if (cachedDevotionalEntry) {
+        setDevotional(cachedDevotionalEntry.data);
       }
-      
-      // Fetch completion if needed
+
       if (shouldFetchCompletion) {
         const completionData = await fetchCompletion();
         if (completionData) {
-          cachedCompletion.current = completionData;
-          lastCompletionFetch.current = now;
+          completionCache.current[targetDate] = { data: completionData, fetchedAt: now };
         }
-      } else if (cachedCompletion.current) {
-        // Use cached completion immediately
-        setCompletionState(cachedCompletion.current);
+      } else if (cachedCompletionEntry) {
+        setCompletionState(cachedCompletionEntry.data);
       }
-      
+
       setLoading(false);
     };
     
     initialize();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [today, currentUserId, currentGroupId, fetchCompletion, fetchDevotional, setCompletionState]); // Only depend on values that should trigger re-fetch
+  }, [
+    targetDate,
+    currentUserId,
+    currentGroupId,
+    fetchCompletion,
+    fetchDevotional,
+    getDefaultCompletion,
+    isFutureDate,
+    setCompletionState,
+  ]); // Only depend on values that should trigger re-fetch
 
   useEffect(() => {
     const handleCompletionUpdate = (entry: CompletionCacheEntry) => {
-      if (entry.date !== today) return;
-      cachedCompletion.current = entry.data;
-      lastCompletionFetch.current = entry.updatedAt;
+      if (entry.date !== targetDate) return;
+      completionCache.current[targetDate] = {
+        data: entry.data,
+        fetchedAt: entry.updatedAt,
+      };
       setCompletionState(entry.data);
     };
 
@@ -261,30 +265,35 @@ export const useDailyDevotional = (): UseDailyDevotionalReturn => {
     return () => {
       completionSubscribers.delete(handleCompletionUpdate);
     };
-  }, [today, setCompletionState]);
+  }, [targetDate, setCompletionState]);
 
   // Update completion in database
   const updateCompletion = useCallback(async (
     updates: Partial<DailyDevotionalCompletion>
   ) => {
+    if (isFutureDate) return;
     if (!currentUserId || !currentGroupId) {
       throw new Error('User or group not available');
     }
 
-    const previousCompletion = completionRef.current || cachedCompletion.current || getDefaultCompletion();
+    const cachedEntry = completionCache.current[targetDate];
+    const previousCompletion =
+      completionRef.current || cachedEntry?.data || getDefaultCompletion();
     const optimisticCompletion = {
       ...previousCompletion,
       ...updates,
     };
     setCompletionState(optimisticCompletion);
-    cachedCompletion.current = optimisticCompletion;
-    lastCompletionFetch.current = Date.now();
+    completionCache.current[targetDate] = {
+      data: optimisticCompletion,
+      fetchedAt: Date.now(),
+    };
     updateGlobalCompletionCache(optimisticCompletion);
     const wasAllCompleted = isFullyCompleted(previousCompletion);
     const isAllCompleted = isFullyCompleted(optimisticCompletion);
     if (isAllCompleted && !wasAllCompleted) {
       notifyDailyDevotionalCompletion({
-        date: today,
+        date: targetDate,
         userId: currentUserId,
         groupId: currentGroupId,
         completion: optimisticCompletion,
@@ -299,7 +308,7 @@ export const useDailyDevotional = (): UseDailyDevotionalReturn => {
         .select('id')
         .eq('user_id', currentUserId)
         .eq('group_id', currentGroupId)
-        .eq('date', today)
+        .eq('date', targetDate)
         .single();
 
       if (fetchError && fetchError.code !== 'PGRST116') {
@@ -328,7 +337,7 @@ export const useDailyDevotional = (): UseDailyDevotionalReturn => {
           .insert({
             user_id: currentUserId,
             group_id: currentGroupId,
-            date: today,
+            date: targetDate,
             ...updates,
           });
 
@@ -343,12 +352,23 @@ export const useDailyDevotional = (): UseDailyDevotionalReturn => {
     } catch (err) {
       console.error('Error updating completion:', err);
       setCompletionState(previousCompletion);
-      cachedCompletion.current = previousCompletion;
-      lastCompletionFetch.current = Date.now();
+      completionCache.current[targetDate] = {
+        data: previousCompletion,
+        fetchedAt: Date.now(),
+      };
       updateGlobalCompletionCache(previousCompletion);
       throw err; // Re-throw so calling code can handle it
     }
-  }, [currentUserId, currentGroupId, today, fetchCompletion, getDefaultCompletion, setCompletionState, updateGlobalCompletionCache]);
+  }, [
+    currentUserId,
+    currentGroupId,
+    fetchCompletion,
+    getDefaultCompletion,
+    isFutureDate,
+    setCompletionState,
+    targetDate,
+    updateGlobalCompletionCache,
+  ]);
 
   const markScriptureComplete = useCallback(async () => {
     await updateCompletion({ scripture_completed: true });
@@ -363,10 +383,14 @@ export const useDailyDevotional = (): UseDailyDevotionalReturn => {
   }, [updateCompletion]);
 
   const refresh = useCallback(async () => {
+    if (isFutureDate) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     await Promise.all([fetchDevotional(), fetchCompletion()]);
     setLoading(false);
-  }, [fetchDevotional, fetchCompletion]);
+  }, [fetchDevotional, fetchCompletion, isFutureDate]);
 
   // Register so requestDailyDevotionalRefresh() can trigger refresh (e.g. from Home pull-to-refresh)
   useEffect(() => {
@@ -388,7 +412,7 @@ export const useDailyDevotional = (): UseDailyDevotionalReturn => {
   // to properly update the streak. For now, we'll create the entry and the parent
   // component should handle streak updates via useDevotionals.addDailyDevotional
   const completeDailyDevotional = useCallback(async () => {
-    if (!allCompleted || !currentUserId || !currentGroupId) return;
+    if (isFutureDate || !allCompleted || !currentUserId || !currentGroupId) return;
 
     try {
       // Check if devotional entry already exists for today (any daily devotional entry)
@@ -397,7 +421,7 @@ export const useDailyDevotional = (): UseDailyDevotionalReturn => {
         .select('id')
         .eq('user_id', currentUserId)
         .eq('group_id', currentGroupId)
-        .eq('post_date', today)
+        .eq('post_date', targetDate)
         .is('image_url', null);
 
       // Check if any of them is a daily devotional entry
@@ -412,7 +436,7 @@ export const useDailyDevotional = (): UseDailyDevotionalReturn => {
     } catch (err) {
       console.error('Error completing daily devotional:', err);
     }
-  }, [allCompleted, currentUserId, currentGroupId, today]);
+  }, [allCompleted, currentUserId, currentGroupId, isFutureDate, targetDate]);
 
   return {
     devotional,

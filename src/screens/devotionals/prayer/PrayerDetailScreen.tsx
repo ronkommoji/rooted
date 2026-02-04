@@ -9,7 +9,7 @@ import {
   Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useRoute } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../../theme/ThemeContext';
 import { Header, Button } from '../../../components';
@@ -23,7 +23,9 @@ type PrayerWithProfile = Prayer & { profiles: Profile };
 export const PrayerDetailScreen: React.FC = () => {
   const { colors, isDark } = useTheme();
   const navigation = useNavigation();
-  const { devotional, markPrayerComplete } = useDailyDevotional();
+  const route = useRoute<any>();
+  const selectedDate = route.params?.date as string | undefined;
+  const { devotional, markPrayerComplete } = useDailyDevotional(selectedDate);
   const { currentGroup } = useAppStore();
 
   const [completing, setCompleting] = useState(false);

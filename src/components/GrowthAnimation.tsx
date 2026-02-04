@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { View, StyleSheet, Animated, Dimensions } from 'react-native';
+import { View, StyleSheet, Animated, Dimensions, Text } from 'react-native';
 import Svg, { Circle } from 'react-native-svg';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 
@@ -20,6 +20,9 @@ export const GrowthAnimation: React.FC<GrowthAnimationProps> = ({ onComplete }) 
   const plantTranslateY = useRef(new Animated.Value(50)).current; // Start below, grow upward
   const plantRotate = useRef(new Animated.Value(-20)).current; // Start more rotated (closed), unfurl to 0
   const plantOpacity = useRef(new Animated.Value(0)).current;
+  const textOpacity = useRef(new Animated.Value(0)).current;
+  const textTranslateY = useRef(new Animated.Value(20)).current; // Start slightly below, move up
+  const textScale = useRef(new Animated.Value(0.8)).current; // Start slightly smaller
 
   useEffect(() => {
     // Sequence of animations
@@ -50,7 +53,7 @@ export const GrowthAnimation: React.FC<GrowthAnimationProps> = ({ onComplete }) 
           friction: 7,
           useNativeDriver: true,
         }),
-        // 3. Leaves unfurl simultaneously (rotation animation)
+        // Leaves unfurl simultaneously (rotation animation)
         Animated.spring(plantRotate, {
           toValue: 0, // Rotate from -20 to 0 (unfurling)
           tension: 100,
@@ -58,9 +61,30 @@ export const GrowthAnimation: React.FC<GrowthAnimationProps> = ({ onComplete }) 
           useNativeDriver: true,
         }),
       ]),
-      // 3. Hold for a moment (600ms)
+      // 3. Text appears (400ms)
+      Animated.parallel([
+        Animated.spring(textOpacity, {
+          toValue: 1,
+          tension: 100,
+          friction: 8,
+          useNativeDriver: true,
+        }),
+        Animated.spring(textTranslateY, {
+          toValue: 0,
+          tension: 100,
+          friction: 8,
+          useNativeDriver: true,
+        }),
+        Animated.spring(textScale, {
+          toValue: 1,
+          tension: 100,
+          friction: 8,
+          useNativeDriver: true,
+        }),
+      ]),
+      // 4. Hold for a moment (600ms)
       Animated.delay(600),
-      // 4. Circle expands to fill screen while plant fades out (600ms)
+      // 5. Circle expands to fill screen while plant and text fade out (600ms)
       Animated.parallel([
         Animated.timing(circleScale, {
           toValue: FULL_SCREEN_SCALE,
@@ -68,6 +92,11 @@ export const GrowthAnimation: React.FC<GrowthAnimationProps> = ({ onComplete }) 
           useNativeDriver: true,
         }),
         Animated.timing(plantOpacity, {
+          toValue: 0,
+          duration: 600,
+          useNativeDriver: true,
+        }),
+        Animated.timing(textOpacity, {
           toValue: 0,
           duration: 600,
           useNativeDriver: true,
@@ -118,6 +147,22 @@ export const GrowthAnimation: React.FC<GrowthAnimationProps> = ({ onComplete }) 
           <MaterialCommunityIcons name="sprout" size={120} color="#FFFFFF" />
         </Animated.View>
       </View>
+
+      {/* Rooted Text - Animated, positioned below the logo */}
+      <Animated.View
+        style={[
+          styles.textContainer,
+          {
+            opacity: textOpacity,
+            transform: [
+              { translateY: textTranslateY },
+              { scale: textScale },
+            ],
+          },
+        ]}
+      >
+        <Text style={styles.text}>Rooted</Text>
+      </Animated.View>
     </View>
   );
 };
@@ -149,5 +194,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     width: 120,
     height: 120,
+  },
+  textContainer: {
+    marginTop: 20, // Position below the circle
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  text: {
+    fontSize: 48,
+    fontWeight: '700',
+    fontFamily: 'PlayfairDisplay_700Bold',
+    color: '#3D5A50',
+    letterSpacing: 2,
   },
 });

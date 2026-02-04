@@ -1,10 +1,10 @@
 import { useState, useCallback, useMemo, useEffect, useRef } from 'react';
-import { format, subDays } from 'date-fns';
+import { format, subDays, isAfter, parseISO } from 'date-fns';
 import { supabase, supabaseUrl } from '../../../lib/supabase';
 import { useAppStore } from '../../../store/useAppStore';
 import { Profile, Devotional, GroupMemberWithProfile } from '../../../types/database';
 import { MemberSubmission, StorySlide } from '../components/StoryRow';
-import { fetchTodayDevotional } from '../../../lib/devotionalApi';
+import { fetchDevotionalByDate } from '../../../lib/devotionalApi';
 import { validateImage, generateUniqueFilename } from '../../../lib/fileValidation';
 import { logger } from '../../../lib/logger';
 import { subscribeDailyDevotionalCompletion } from '../../../lib/dailyDevotionalEvents';
@@ -66,26 +66,26 @@ export const useDevotionals = (selectedDate: Date): UseDevotionalsReturn => {
   const selectedDateISO = format(selectedDate, 'yyyy-MM-dd');
   const currentUserId = session?.user?.id;
 
-  // Fetch daily devotional image for today
+  // Fetch daily devotional image for selected date
   useEffect(() => {
     const fetchDailyDevotionalImage = async () => {
       try {
-        const devotional = await fetchTodayDevotional();
-        if (devotional?.image_url) {
-          setDailyDevotionalImageUrl(devotional.image_url);
-        }
+        const devotional = await fetchDevotionalByDate(selectedDateISO);
+        setDailyDevotionalImageUrl(devotional?.image_url || null);
       } catch (error) {
         console.error('Error fetching daily devotional image:', error);
+        setDailyDevotionalImageUrl(null);
       }
     };
 
-    // Only fetch if we're looking at today's date
     const today = format(new Date(), 'yyyy-MM-dd');
-    if (selectedDateISO === today) {
-      fetchDailyDevotionalImage();
-    } else {
+    const isFutureDay = isAfter(parseISO(selectedDateISO), parseISO(today));
+    if (isFutureDay) {
       setDailyDevotionalImageUrl(null);
+      return;
     }
+
+    fetchDailyDevotionalImage();
   }, [selectedDateISO]);
 
   // Fetch devotionals for the selected date
@@ -436,12 +436,12 @@ export const useDevotionals = (selectedDate: Date): UseDevotionalsReturn => {
       const dailyCompletion = dailyCompletions.get(member.memberId);
 
       // Add daily devotional slide if completed (always show if they completed daily)
-      if (hasCompletedDaily && dailyDevotionalImageUrl) {
+      if (hasCompletedDaily) {
         slides.push({
           memberId: member.memberId,
           memberName: member.memberName,
           type: 'daily',
-          imageUrl: dailyDevotionalImageUrl,
+          imageUrl: dailyDevotionalImageUrl || '',
           title: 'Completed in app devotional',
           dailyDevotionalComment: dailyCompletion?.hasComment ? dailyCompletion.commentText : undefined,
           dailyDevotionalCommentId: dailyCompletion?.commentId,

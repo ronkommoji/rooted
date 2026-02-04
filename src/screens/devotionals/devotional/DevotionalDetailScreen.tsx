@@ -9,7 +9,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useRoute } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../../theme/ThemeContext';
 import { Header, Button } from '../../../components';
@@ -21,7 +21,9 @@ import { supabase } from '../../../lib/supabase';
 export const DevotionalDetailScreen: React.FC = () => {
   const { colors, isDark } = useTheme();
   const navigation = useNavigation();
-  const { devotional, markDevotionalComplete, loading: devotionalLoading } = useDailyDevotional();
+  const route = useRoute<any>();
+  const selectedDate = route.params?.date as string | undefined;
+  const { devotional, markDevotionalComplete, loading: devotionalLoading } = useDailyDevotional(selectedDate);
   const { currentGroup, session } = useAppStore();
 
   const [completing, setCompleting] = useState(false);
@@ -38,12 +40,13 @@ export const DevotionalDetailScreen: React.FC = () => {
         // Check if a daily devotional entry exists for today
         // Check for any entry with content starting with "Daily Devotional" and no image
         const today = new Date().toISOString().split('T')[0];
+        const targetDate = selectedDate || today;
         const { data: existingEntries } = await supabase
           .from('devotionals')
           .select('id, content')
           .eq('user_id', session.user.id)
           .eq('group_id', currentGroup.id)
-          .eq('post_date', today)
+          .eq('post_date', targetDate)
           .is('image_url', null);
 
         let devotionalIdForComments: string | null = null;
@@ -63,7 +66,7 @@ export const DevotionalDetailScreen: React.FC = () => {
             .insert({
               user_id: session.user.id,
               group_id: currentGroup.id,
-              post_date: today,
+              post_date: targetDate,
               content: `Daily Devotional: ${devotional.title}`,
               image_url: null,
             })
@@ -93,7 +96,7 @@ export const DevotionalDetailScreen: React.FC = () => {
     };
 
     getOrCreateDevotionalForComments();
-  }, [currentGroup?.id, session?.user?.id, devotional]);
+  }, [currentGroup?.id, session?.user?.id, devotional, selectedDate]);
 
   const handleComplete = async () => {
     setCompleting(true);

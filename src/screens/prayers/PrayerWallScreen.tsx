@@ -74,6 +74,7 @@ export const PrayerWallScreen: React.FC = () => {
 
   // Track which prayer is being animated
   const [animatingPrayerId, setAnimatingPrayerId] = useState<string | null>(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   // React Query hooks
   const isAnsweredFilter = filter === 'Answered';
@@ -102,7 +103,12 @@ export const PrayerWallScreen: React.FC = () => {
   }));
 
   const onRefresh = async () => {
-    await refetch();
+    setIsRefreshing(true);
+    try {
+      await refetch();
+    } finally {
+      setIsRefreshing(false);
+    }
   };
 
   const handlePray = async (prayer: PrayerWithDetails) => {
@@ -112,41 +118,56 @@ export const PrayerWallScreen: React.FC = () => {
     if (processingPrayers.has(prayer.id)) return;
 
     setProcessingPrayers((prev) => new Set(prev).add(prayer.id));
-
-    try {
-      await incrementPrayerCountMutation.mutateAsync(prayer.id);
-
-      // Send push notification to prayer author if different from current user
-      if (prayer.user_id !== session.user.id && profile) {
-        // Check if prayer author has prayer notifications enabled
-        const { data: authorPreferences } = await supabase
-          .from('user_preferences')
-          .select('prayer_notifications')
-          .eq('user_id', prayer.user_id)
-          .maybeSingle();
-
-        if (authorPreferences?.prayer_notifications !== false) {
-          // Send push notification
-          await sendPushNotification(
-            prayer.user_id,
-            'Someone Prayed for You 🙏',
-            `${profile.full_name} prayed for "${prayer.title}"`,
-            {
-              type: 'prayer',
-              id: prayer.id,
-            }
-          );
-        }
-      }
-    } catch (error) {
-      console.error('Error incrementing prayer count:', error);
-    } finally {
-      // Remove from processing set
+    let didClearProcessing = false;
+    const clearProcessing = () => {
       setProcessingPrayers((prev) => {
         const next = new Set(prev);
         next.delete(prayer.id);
         return next;
       });
+      didClearProcessing = true;
+    };
+
+    try {
+      await incrementPrayerCountMutation.mutateAsync(prayer.id);
+      // Re-enable the button immediately after the increment completes
+      clearProcessing();
+
+      // Send push notification to prayer author if different from current user
+      if (prayer.user_id !== session.user.id && profile) {
+        // Fire-and-forget notification work to avoid blocking the UI
+        (async () => {
+          try {
+            // Check if prayer author has prayer notifications enabled
+            const { data: authorPreferences } = await supabase
+              .from('user_preferences')
+              .select('prayer_notifications')
+              .eq('user_id', prayer.user_id)
+              .maybeSingle();
+
+            if (authorPreferences?.prayer_notifications !== false) {
+              // Send push notification
+              await sendPushNotification(
+                prayer.user_id,
+                'Someone Prayed for You 🙏',
+                `${profile.full_name} prayed for "${prayer.title}"`,
+                {
+                  type: 'prayer',
+                  id: prayer.id,
+                }
+              );
+            }
+          } catch (error) {
+            console.error('Error sending prayer notification:', error);
+          }
+        })();
+      }
+    } catch (error) {
+      console.error('Error incrementing prayer count:', error);
+    } finally {
+      if (!didClearProcessing) {
+        clearProcessing();
+      }
     }
   };
 
@@ -421,7 +442,7 @@ export const PrayerWallScreen: React.FC = () => {
         estimatedItemSize={200}
         contentContainerStyle={styles.list}
         refreshControl={
-          <RefreshControl refreshing={isFetching} onRefresh={onRefresh} />
+          <RefreshControl refreshing={isRefreshing} onRefresh={onRefresh} />
         }
         ListEmptyComponent={
           !loading ? (

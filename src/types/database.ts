@@ -202,6 +202,24 @@ export type Database = {
           },
         ]
       }
+      daily_devotionals: {
+        Row: {
+          created_at: string | null
+          data: Json
+          date: string
+        }
+        Insert: {
+          created_at?: string | null
+          data: Json
+          date: string
+        }
+        Update: {
+          created_at?: string | null
+          data?: Json
+          date?: string
+        }
+        Relationships: []
+      }
       devotional_comments: {
         Row: {
           content: string

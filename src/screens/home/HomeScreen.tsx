@@ -174,6 +174,10 @@ export const HomeScreen: React.FC = () => {
     setShowStoryViewer(true);
   };
 
+  const handleMemberProfilePress = (memberId: string) => {
+    navigation.navigate('Profile', { userId: memberId });
+  };
+
   const handleAddDevotional = async (imageUri: string) => {
     setUploading(true);
     try {
@@ -229,6 +233,7 @@ export const HomeScreen: React.FC = () => {
           currentUserId={currentUserId}
           currentUserHasPosted={currentUserHasPosted}
           onMemberPress={handleMemberStoryPress}
+          onMemberProfilePress={handleMemberProfilePress}
           onAddPress={() => setShowAddDevotional(true)}
           onSeeAllPress={() => navigation.navigate('Devotionals')}
           loading={loadingDevotionals}

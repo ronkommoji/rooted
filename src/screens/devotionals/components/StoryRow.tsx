@@ -38,6 +38,7 @@ interface StoryRowProps {
   currentUserId: string;
   currentUserHasPosted: boolean;
   onMemberPress: (memberId: string) => void;
+  onMemberProfilePress?: (memberId: string) => void;
   onAddPress: () => void;
 }
 
@@ -46,6 +47,7 @@ export const StoryRow: React.FC<StoryRowProps> = ({
   currentUserId,
   currentUserHasPosted,
   onMemberPress,
+  onMemberProfilePress,
   onAddPress,
 }) => {
   const { colors, isDark } = useTheme();
@@ -95,10 +97,11 @@ export const StoryRow: React.FC<StoryRowProps> = ({
               onPress={() => {
                 if (hasPosted) {
                   onMemberPress(member.memberId);
+                } else if (onMemberProfilePress) {
+                  onMemberProfilePress(member.memberId);
                 }
               }}
-              disabled={!hasPosted}
-              activeOpacity={hasPosted ? 0.7 : 1}
+              activeOpacity={0.7}
             >
               <View
                 style={[

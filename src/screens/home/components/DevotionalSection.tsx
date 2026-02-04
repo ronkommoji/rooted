@@ -31,6 +31,7 @@ export interface DevotionalSectionProps {
   currentUserId: string;
   currentUserHasPosted: boolean;
   onMemberPress: (memberId: string) => void;
+  onMemberProfilePress?: (memberId: string) => void;
   onAddPress: () => void;
   onSeeAllPress: () => void;
   loading?: boolean;
@@ -41,6 +42,7 @@ export const DevotionalSection: React.FC<DevotionalSectionProps> = ({
   currentUserId,
   currentUserHasPosted,
   onMemberPress,
+  onMemberProfilePress,
   onAddPress,
   onSeeAllPress,
   loading = false,
@@ -73,6 +75,7 @@ export const DevotionalSection: React.FC<DevotionalSectionProps> = ({
           currentUserId={currentUserId}
           currentUserHasPosted={currentUserHasPosted}
           onMemberPress={onMemberPress}
+          onMemberProfilePress={onMemberProfilePress}
           onAddPress={onAddPress}
         />
       )}
