@@ -24,6 +24,7 @@ interface UseDevotionalsReturn {
   memberSubmissions: MemberSubmission[];
   feedSubmissions: MemberSubmission[];
   currentUserHasPosted: boolean;
+  currentUserHasImagePost: boolean;
   completedCount: number;
   totalMembers: number;
   currentUserStreak: number;
@@ -390,12 +391,16 @@ export const useDevotionals = (selectedDate: Date): UseDevotionalsReturn => {
       });
   }, [memberSubmissions]);
 
+  // Check if current user has posted an image devotional
+  const currentUserHasImagePost = useMemo(() => {
+    return devotionals.some((d) => d.user_id === currentUserId);
+  }, [devotionals, currentUserId]);
+
   // Check if current user has posted (either image devotional or daily devotional completion)
   const currentUserHasPosted = useMemo(() => {
-    const hasImageDevotional = devotionals.some((d) => d.user_id === currentUserId);
     const hasDailyDevotional = currentUserId ? dailyCompletionUserIds.has(currentUserId) : false;
-    return hasImageDevotional || hasDailyDevotional;
-  }, [devotionals, currentUserId, dailyCompletionUserIds]);
+    return currentUserHasImagePost || hasDailyDevotional;
+  }, [currentUserHasImagePost, currentUserId, dailyCompletionUserIds]);
 
   // Progress counts
   const completedCount = feedSubmissions.length;
@@ -754,6 +759,7 @@ export const useDevotionals = (selectedDate: Date): UseDevotionalsReturn => {
     memberSubmissions,
     feedSubmissions,
     currentUserHasPosted,
+    currentUserHasImagePost,
     completedCount,
     totalMembers,
     currentUserStreak: userStreak,
