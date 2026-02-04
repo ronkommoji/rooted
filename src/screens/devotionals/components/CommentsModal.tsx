@@ -230,12 +230,14 @@ export const CommentsModal: React.FC<CommentsModalProps> = ({
 
     return (
       <View style={styles.commentItem}>
-        <Avatar
-          name={item.profiles?.full_name || 'Unknown'}
-          imageUrl={item.profiles?.avatar_url}
-          size={32}
-          backgroundColor={colors.primary}
-        />
+        <View style={styles.commentAvatarWrapper}>
+          <Avatar
+            name={item.profiles?.full_name || 'Unknown'}
+            imageUrl={item.profiles?.avatar_url}
+            size={32}
+            backgroundColor={colors.primary}
+          />
+        </View>
         <View style={styles.commentContent}>
           <View style={styles.commentHeader}>
             <Text style={[styles.commentAuthor, { color: colors.text }]}>
@@ -337,12 +339,14 @@ export const CommentsModal: React.FC<CommentsModalProps> = ({
             }
           ]}
         >
-            <Avatar
-              name={profile?.full_name || 'You'}
-              imageUrl={profile?.avatar_url}
-              size={32}
-              backgroundColor={colors.primary}
-            />
+            <View style={styles.inputAvatarWrapper}>
+              <Avatar
+                name={profile?.full_name || 'You'}
+                imageUrl={profile?.avatar_url}
+                size={32}
+                backgroundColor={colors.primary}
+              />
+            </View>
             <TextInput
               style={[styles.input, { 
                 color: colors.text,
@@ -447,6 +451,9 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     alignItems: 'flex-start',
   },
+  commentAvatarWrapper: {
+    marginRight: 8,
+  },
   commentAvatar: {
     width: 32,
     height: 32,
@@ -490,6 +497,9 @@ const styles = StyleSheet.create({
     position: 'absolute',
     left: 0,
     right: 0,
+  },
+  inputAvatarWrapper: {
+    marginRight: 14,
   },
   inputAvatar: {
     width: 32,
