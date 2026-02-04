@@ -50,6 +50,7 @@ export const DevotionalsScreen: React.FC = () => {
     memberSubmissions,
     feedSubmissions,
     currentUserHasPosted,
+    currentUserHasImagePost,
     completedCount,
     totalMembers,
     currentUserStreak,
@@ -198,7 +199,7 @@ export const DevotionalsScreen: React.FC = () => {
                 <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
                   Be the first to share your devotional today!
                 </Text>
-                {!currentUserHasPosted && (
+                {!currentUserHasImagePost && (
                   <TouchableOpacity
                     style={[styles.addButton, { backgroundColor: isDark ? '#3D5A50' : colors.primary }]}
                     onPress={() => setShowAddSheet(true)}
@@ -232,7 +233,7 @@ export const DevotionalsScreen: React.FC = () => {
       </ScrollView>
 
       {/* FAB for adding devotional */}
-      {!currentUserHasPosted && feedSubmissions.length > 0 && (
+      {!currentUserHasImagePost && feedSubmissions.length > 0 && (
         <TouchableOpacity
           style={[styles.fab, { backgroundColor: isDark ? '#3D5A50' : colors.primary }]}
           onPress={() => setShowAddSheet(true)}
