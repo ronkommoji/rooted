@@ -501,13 +501,16 @@ export const useDevotionals = (selectedDate: Date): UseDevotionalsReturn => {
     if (!currentGroup?.id || !currentUserId) return;
 
     try {
-      // Check if already posted today
+      // Check if already posted an image devotional today
+      // Only match entries with an image_url to avoid overwriting
+      // the daily devotional placeholder (which has image_url: null and holds its own comments)
       const { data: existing } = await supabase
         .from('devotionals')
         .select('id')
         .eq('group_id', currentGroup.id)
         .eq('user_id', currentUserId)
         .eq('post_date', selectedDateISO)
+        .not('image_url', 'is', null)
         .single();
 
       if (existing) {

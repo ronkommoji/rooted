@@ -265,5 +265,11 @@ export const useIncrementPrayerCountMutation = () => {
         });
       }
     },
+    onSettled: () => {
+      // Refetch all prayer queries to sync with server
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.prayers.byGroup(currentGroup?.id || ''),
+      });
+    },
   });
 };
