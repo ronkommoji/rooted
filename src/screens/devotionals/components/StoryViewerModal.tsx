@@ -316,7 +316,7 @@ export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({
             <Image
               source={{ uri: currentSlide.imageUrl, cache: 'force-cache' }}
               style={styles.image}
-              resizeMode="contain"
+              resizeMode="cover"
             />
           ) : currentSlide.type === 'daily' ? (
             <View style={styles.textStoryContainer}>
@@ -438,8 +438,8 @@ const styles = StyleSheet.create({
     position: 'relative',
   },
   image: {
+    flex: 1,
     width: SCREEN_WIDTH,
-    height: SCREEN_HEIGHT * 0.7,
   },
   pauseIndicator: {
     position: 'absolute',

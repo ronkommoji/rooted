@@ -26,7 +26,7 @@ interface UseDevotionalsReturn {
   storySlides: StorySlide[];
   currentUserHasPosted: boolean;
   currentUserCompletedDaily: boolean;
-  currentUserHasUploadedImage: boolean;
+  currentUserHasImagePost: boolean;
   completedCount: number;
   totalMembers: number;
   currentUserStreak: number;
@@ -394,12 +394,16 @@ export const useDevotionals = (selectedDate: Date): UseDevotionalsReturn => {
       });
   }, [memberSubmissions]);
 
+  // Check if current user has posted an image devotional
+  const currentUserHasImagePost = useMemo(() => {
+    return devotionals.some((d) => d.user_id === currentUserId);
+  }, [devotionals, currentUserId]);
+
   // Check if current user has posted (either image devotional or daily devotional completion)
   const currentUserHasPosted = useMemo(() => {
-    const hasImageDevotional = devotionals.some((d) => d.user_id === currentUserId);
     const hasDailyDevotional = currentUserId ? dailyCompletionUserIds.has(currentUserId) : false;
-    return hasImageDevotional || hasDailyDevotional;
-  }, [devotionals, currentUserId, dailyCompletionUserIds]);
+    return currentUserHasImagePost || hasDailyDevotional;
+  }, [currentUserHasImagePost, currentUserId, dailyCompletionUserIds]);
 
   // Check if current user completed daily devotional
   const currentUserCompletedDaily = useMemo(() => {
@@ -565,13 +569,16 @@ export const useDevotionals = (selectedDate: Date): UseDevotionalsReturn => {
     if (!currentGroup?.id || !currentUserId) return;
 
     try {
-      // Check if already posted today
+      // Check if already posted an image devotional today
+      // Only match entries with an image_url to avoid overwriting
+      // the daily devotional placeholder (which has image_url: null and holds its own comments)
       const { data: existing } = await supabase
         .from('devotionals')
         .select('id')
         .eq('group_id', currentGroup.id)
         .eq('user_id', currentUserId)
         .eq('post_date', selectedDateISO)
+        .not('image_url', 'is', null)
         .single();
 
       if (existing) {
@@ -817,7 +824,7 @@ export const useDevotionals = (selectedDate: Date): UseDevotionalsReturn => {
     storySlides,
     currentUserHasPosted,
     currentUserCompletedDaily,
-    currentUserHasUploadedImage,
+    currentUserHasImagePost,
     completedCount,
     totalMembers,
     currentUserStreak: userStreak,
