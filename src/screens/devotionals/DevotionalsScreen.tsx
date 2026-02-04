@@ -81,20 +81,17 @@ export const DevotionalsScreen: React.FC = () => {
   const handleAddDevotional = async (imageUri: string) => {
     setUploading(true);
     try {
-      // Upload image to Supabase Storage
       const publicUrl = await uploadImage(imageUri);
-      
       if (!publicUrl) {
         Alert.alert('Error', 'Failed to upload image. Please try again.');
-        setUploading(false);
         return;
       }
-
-      // Create devotional with the uploaded image URL
-      await addDevotional(publicUrl);
-      
-      // Only close modal after successful upload and creation
+      // Close modal as soon as upload succeeds; insert runs in background and post appears via optimistic update
       setShowAddSheet(false);
+      addDevotional(publicUrl).catch((err: any) => {
+        console.error('Error adding devotional:', err);
+        Alert.alert('Error', err?.message || 'Failed to add devotional');
+      });
     } catch (error: any) {
       console.error('Error adding devotional:', error);
       Alert.alert('Error', error.message || 'Failed to add devotional');
@@ -163,7 +160,6 @@ export const DevotionalsScreen: React.FC = () => {
               members={memberSubmissions}
               currentUserId={currentUserId}
               currentUserHasPosted={currentUserHasPosted}
-              currentUserHasUploadedImage={currentUserHasImagePost}
               onMemberPress={handleMemberStoryPress}
               onAddPress={() => setShowAddSheet(true)}
             />

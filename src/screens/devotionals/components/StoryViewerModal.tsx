@@ -11,6 +11,7 @@ import {
   Animated,
   PanResponder,
   StatusBar,
+  ActivityIndicator,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
@@ -19,6 +20,8 @@ import { StorySlide } from './StoryRow';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const AUTO_ADVANCE_DELAY = 5000; // 5 seconds
+const PREFETCH_BATCH_SIZE = 2;
+const PREFETCH_BATCH_DELAY_MS = 120;
 
 interface StoryViewerModalProps {
   visible: boolean;
@@ -49,7 +52,9 @@ export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({
   const translateY = useRef(new Animated.Value(0)).current;
   const opacity = useRef(new Animated.Value(1)).current;
   const animationRef = useRef<Animated.CompositeAnimation | null>(null);
-  const progressValue = useRef(0); // Track actual progress value for pause/resume
+  const progressValue = useRef(0);
+  const prefetchedUrls = useRef<Set<string>>(new Set());
+  const [imageLoading, setImageLoading] = useState(true);
 
   // Track progress value for pause/resume
   useEffect(() => {
@@ -61,32 +66,112 @@ export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({
     };
   }, [progressAnim]);
 
-  // Reset index when modal opens
+  // Reset index when modal opens, or when slides change (e.g. after a post is deleted)
   useEffect(() => {
-    if (visible) {
+    if (visible && storySlides.length > 0) {
       const idx = storySlides.findIndex((s) => s.memberId === initialMemberId);
-      setCurrentIndex(idx >= 0 ? idx : 0);
+      const safeIndex = idx >= 0 ? idx : 0;
+      setCurrentIndex(safeIndex);
       progressAnim.setValue(0);
       progressValue.current = 0;
       setIsPaused(false);
     }
   }, [visible, initialMemberId, storySlides]);
 
-  // Prefetch all story images when viewer opens so they're cached for smooth viewing
+  // When slides list shrinks (e.g. current user deleted their post), clamp index so we never point past the end
+  useEffect(() => {
+    if (visible && storySlides.length > 0) {
+      setCurrentIndex((prev) => {
+        if (prev >= storySlides.length) {
+          return Math.max(0, storySlides.length - 1);
+        }
+        return prev;
+      });
+    }
+  }, [visible, storySlides.length]);
+
+  // If current index is out of bounds (e.g. slide was removed after delete), close to avoid reading currentSlide.memberName of undefined
+  useEffect(() => {
+    if (visible && storySlides.length > 0 && !storySlides[currentIndex]) {
+      onClose();
+    }
+  }, [visible, storySlides, currentIndex, onClose]);
+
+  // Clear prefetch set when viewer closes so next open will prefetch with fresh priority
+  useEffect(() => {
+    if (!visible) prefetchedUrls.current = new Set();
+  }, [visible]);
+
+  // Reset loading when slide changes; if current slide has no image, clear loading immediately
+  useEffect(() => {
+    if (visible && storySlides.length > 0) {
+      const slide = storySlides[currentIndex];
+      const hasImage = slide?.imageUrl?.trim();
+      setImageLoading(!!hasImage);
+    }
+  }, [visible, currentIndex, storySlides]);
+
+  // Prefetch images in priority order: current first, then next/prev, then rest in small batches
   useEffect(() => {
     if (!visible || storySlides.length === 0) return;
 
-    const urls: string[] = [];
-    storySlides.forEach((slide) => {
-      if (slide.imageUrl?.trim()) urls.push(slide.imageUrl);
+    const urlFor = (index: number) => storySlides[index]?.imageUrl?.trim();
+    const needPrefetch = (url: string | undefined) => url && !prefetchedUrls.current.has(url);
+
+    // Build priority order: current first, then +1, -1, +2, -2, ... so nearby slides load first
+    const indicesByPriority: number[] = [];
+    const used = new Set<number>();
+    if (currentIndex >= 0 && currentIndex < storySlides.length) {
+      used.add(currentIndex);
+      indicesByPriority.push(currentIndex);
+    }
+    for (let offset = 1; offset < storySlides.length; offset++) {
+      for (const i of [currentIndex + offset, currentIndex - offset]) {
+        if (i >= 0 && i < storySlides.length && !used.has(i)) {
+          used.add(i);
+          indicesByPriority.push(i);
+        }
+      }
+    }
+
+    const urlsToPrefetch: string[] = [];
+    indicesByPriority.forEach((i) => {
+      const url = urlFor(i);
+      if (needPrefetch(url)) urlsToPrefetch.push(url!);
     });
 
-    urls.forEach((url) => {
-      Image.prefetch(url).catch(() => {
-        // Ignore prefetch errors; image will load on demand
+    let batchStart = 0;
+    const runBatch = () => {
+      const batch = urlsToPrefetch.slice(batchStart, batchStart + PREFETCH_BATCH_SIZE);
+      batchStart += PREFETCH_BATCH_SIZE;
+      batch.forEach((url) => {
+        prefetchedUrls.current.add(url);
+        Image.prefetch(url).catch(() => {});
       });
+      if (batchStart < urlsToPrefetch.length) {
+        setTimeout(runBatch, PREFETCH_BATCH_DELAY_MS);
+      }
+    };
+    runBatch();
+
+    return () => {};
+  }, [visible, storySlides, currentIndex]);
+
+  // When index changes, ensure adjacent slides are prefetched (in case we navigated before initial batch finished)
+  useEffect(() => {
+    if (!visible || storySlides.length === 0) return;
+    const urls: string[] = [];
+    [currentIndex, currentIndex + 1, currentIndex - 1].forEach((i) => {
+      if (i >= 0 && i < storySlides.length) {
+        const url = storySlides[i].imageUrl?.trim();
+        if (url && !prefetchedUrls.current.has(url)) {
+          urls.push(url);
+          prefetchedUrls.current.add(url);
+        }
+      }
     });
-  }, [visible, storySlides]);
+    urls.forEach((url) => Image.prefetch(url).catch(() => {}));
+  }, [visible, storySlides, currentIndex]);
 
   // Start animation helper
   const startAnimation = useCallback((fromValue: number = 0) => {
@@ -224,6 +309,9 @@ export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({
   }
 
   const currentSlide = storySlides[currentIndex];
+  if (!currentSlide) {
+    return null;
+  }
 
   const getInitials = (name: string) => {
     const parts = name.split(' ');
@@ -313,20 +401,40 @@ export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({
           delayLongPress={150}
         >
           {currentSlide.type === 'image' ? (
-            <Image
-              source={{ uri: currentSlide.imageUrl, cache: 'force-cache' }}
-              style={styles.image}
-              resizeMode="cover"
-            />
+            <>
+              {/* Uploaded image: fit to screen (contain), centered; letterbox is container background */}
+              <Image
+                source={{ uri: currentSlide.imageUrl, cache: 'force-cache' }}
+                style={styles.storyImageContain}
+                resizeMode="contain"
+                onLoadStart={() => setImageLoading(true)}
+                onLoadEnd={() => setImageLoading(false)}
+                onLoad={() => setImageLoading(false)}
+              />
+              {imageLoading && (
+                <View style={styles.imageLoadingOverlay}>
+                  <ActivityIndicator size="large" color="rgba(255,255,255,0.8)" />
+                </View>
+              )}
+            </>
           ) : currentSlide.type === 'daily' ? (
             <View style={styles.textStoryContainer}>
-              {/* Background image from daily devotional API */}
               {currentSlide.imageUrl && (
-                <Image
-                  source={{ uri: currentSlide.imageUrl, cache: 'force-cache' }}
-                  style={styles.backgroundImage}
-                  resizeMode="cover"
-                />
+                <>
+                  <Image
+                    source={{ uri: currentSlide.imageUrl, cache: 'force-cache' }}
+                    style={styles.backgroundImage}
+                    resizeMode="cover"
+                    onLoadStart={() => setImageLoading(true)}
+                    onLoadEnd={() => setImageLoading(false)}
+                    onLoad={() => setImageLoading(false)}
+                  />
+                  {imageLoading && (
+                    <View style={styles.imageLoadingOverlay}>
+                      <ActivityIndicator size="large" color="rgba(255,255,255,0.8)" />
+                    </View>
+                  )}
+                </>
               )}
               {/* Overlay for better text readability */}
               <View style={styles.overlay} />
@@ -437,9 +545,16 @@ const styles = StyleSheet.create({
     height: SCREEN_HEIGHT,
     position: 'relative',
   },
-  image: {
+  /** Uploaded image: fit to screen (contain), centered */
+  storyImageContain: {
     flex: 1,
     width: SCREEN_WIDTH,
+  },
+  imageLoadingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.3)',
   },
   pauseIndicator: {
     position: 'absolute',

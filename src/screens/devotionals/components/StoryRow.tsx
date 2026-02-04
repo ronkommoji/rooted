@@ -1,6 +1,5 @@
 import React from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../../theme/ThemeContext';
 import { Avatar } from '../../../components/Avatar';
 
@@ -38,8 +37,6 @@ interface StoryRowProps {
   members: MemberSubmission[];
   currentUserId: string;
   currentUserHasPosted: boolean;
-  /** True if current user has uploaded an image devotional; plus button shows when false so they can add image (even after in-app completion) */
-  currentUserHasUploadedImage?: boolean;
   onMemberPress: (memberId: string) => void;
   onAddPress: () => void;
 }
@@ -48,7 +45,6 @@ export const StoryRow: React.FC<StoryRowProps> = ({
   members,
   currentUserId,
   currentUserHasPosted,
-  currentUserHasUploadedImage = false,
   onMemberPress,
   onAddPress,
 }) => {
@@ -90,23 +86,19 @@ export const StoryRow: React.FC<StoryRowProps> = ({
         {sortedMembers.map((member) => {
           const isCurrentUser = member.memberId === currentUserId;
           const hasPosted = member.hasPosted;
-          const canAddImage = isCurrentUser && !currentUserHasUploadedImage;
           const ringColor = hasPosted ? (isDark ? '#3D5A50' : colors.primary) : colors.cardBorder;
-          const canTap = hasPosted || canAddImage;
 
           return (
             <TouchableOpacity
               key={member.memberId}
               style={styles.memberContainer}
               onPress={() => {
-                if (canAddImage) {
-                  onAddPress();
-                } else if (hasPosted) {
+                if (hasPosted) {
                   onMemberPress(member.memberId);
                 }
               }}
-              disabled={!canTap}
-              activeOpacity={canTap ? 0.7 : 1}
+              disabled={!hasPosted}
+              activeOpacity={hasPosted ? 0.7 : 1}
             >
               <View
                 style={[
@@ -122,13 +114,6 @@ export const StoryRow: React.FC<StoryRowProps> = ({
                     size={52}
                   />
                 </View>
-
-                {/* Add badge when current user can still upload image (even after in-app completion) */}
-                {canAddImage && (
-                  <View style={[styles.addBadge, { backgroundColor: isDark ? '#3D5A50' : colors.primary }]}>
-                    <Ionicons name="add" size={14} color="#FFFFFF" />
-                  </View>
-                )}
               </View>
 
               <Text
@@ -175,18 +160,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderRadius: 28,
     overflow: 'hidden',
-  },
-  addBadge: {
-    position: 'absolute',
-    bottom: 0,
-    right: 0,
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 2,
-    borderColor: '#FFFFFF',
   },
   memberName: {
     fontSize: 12,

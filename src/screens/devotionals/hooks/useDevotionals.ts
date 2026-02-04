@@ -570,8 +570,6 @@ export const useDevotionals = (selectedDate: Date): UseDevotionalsReturn => {
 
     try {
       // Check if already posted an image devotional today
-      // Only match entries with an image_url to avoid overwriting
-      // the daily devotional placeholder (which has image_url: null and holds its own comments)
       const { data: existing } = await supabase
         .from('devotionals')
         .select('id')
@@ -582,7 +580,6 @@ export const useDevotionals = (selectedDate: Date): UseDevotionalsReturn => {
         .single();
 
       if (existing) {
-        // Update existing devotional
         await supabase
           .from('devotionals')
           .update({
@@ -590,30 +587,48 @@ export const useDevotionals = (selectedDate: Date): UseDevotionalsReturn => {
             updated_at: new Date().toISOString(),
           })
           .eq('id', existing.id);
+        const now = new Date().toISOString();
+        setDevotionals((prev) =>
+          prev.map((d) =>
+            d.id === existing.id ? { ...d, image_url: imageUrl, updated_at: now } : d
+          )
+        );
+        lastFetchTime.current[selectedDateISO] = 0;
       } else {
-        // Create new devotional
-        await supabase
+        const { data: inserted, error: insertError } = await supabase
           .from('devotionals')
           .insert({
             group_id: currentGroup.id,
             user_id: currentUserId,
             image_url: imageUrl,
             post_date: selectedDateISO,
-          });
+          })
+          .select()
+          .single();
 
-        // Update streak
+        if (insertError) throw insertError;
         await updateStreak();
+
+        // Optimistic update: show new post immediately so modal can close without waiting for refetch
+        if (inserted && profile) {
+          const newEntry: DevotionalWithProfile = {
+            ...inserted,
+            profiles: profile,
+            likes_count: 0,
+            user_liked: false,
+          } as DevotionalWithProfile;
+          setDevotionals((prev) => [...prev, newEntry]);
+          lastFetchTime.current[selectedDateISO] = 0; // Invalidate cache so next refetch is fresh
+        }
       }
 
-      // Refresh data
-      await fetchDevotionals();
-
-      // Check if all members have uploaded devotionals for this date
+      // Refetch in background (force refresh) so list stays in sync; don't await so modal closes fast
+      fetchDevotionals(true);
     } catch (error) {
       console.error('Error adding devotional:', error);
       throw error;
     }
-  }, [currentGroup?.id, currentUserId, selectedDateISO, fetchDevotionals]);
+  }, [currentGroup?.id, currentUserId, selectedDateISO, fetchDevotionals, profile]);
 
   // Update user streak
   const updateStreak = useCallback(async () => {

@@ -180,12 +180,14 @@ export const SubmissionCard: React.FC<SubmissionCardProps> = React.memo(({
           accessibilityRole="button"
           accessibilityLabel={`View ${submission.memberName}'s profile`}
         >
-          <Avatar
-            name={submission.memberName}
-            imageUrl={submission.avatarUrl}
-            size={40}
-            backgroundColor={colors.primary}
-          />
+          <View style={styles.avatarWrapper}>
+            <Avatar
+              name={submission.memberName}
+              imageUrl={submission.avatarUrl}
+              size={32}
+              backgroundColor={colors.primary}
+            />
+          </View>
           <Text style={[styles.memberName, { color: colors.text }]}>
             {submission.memberName}
           </Text>
@@ -364,6 +366,9 @@ const styles = StyleSheet.create({
   headerLeft: {
     flexDirection: 'row',
     alignItems: 'center',
+  },
+  avatarWrapper: {
+    marginRight: 10,
   },
   avatar: {
     width: 36,

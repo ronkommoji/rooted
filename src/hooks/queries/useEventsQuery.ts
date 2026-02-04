@@ -59,7 +59,7 @@ const fetchRecentEvents = async (groupId: string, limit: number = 2) => {
 
   if (error) throw error;
 
-  // Fetch RSVP counts for each event
+  // Fetch RSVP counts for each event (status 'yes' = going, same as Events screen)
   if (data && data.length > 0) {
     const eventsWithCounts = await Promise.all(
       data.map(async (event) => {
@@ -67,18 +67,18 @@ const fetchRecentEvents = async (groupId: string, limit: number = 2) => {
           .from('event_rsvps')
           .select('*', { count: 'exact', head: true })
           .eq('event_id', event.id)
-          .eq('status', 'going');
+          .eq('status', 'yes');
 
         return {
           ...event,
-          rsvp_count: count || 0,
+          rsvp_count: count ?? 0,
         };
       })
     );
     return eventsWithCounts;
   }
 
-  return data.map((event) => ({ ...event, rsvp_count: 0 }));
+  return (data ?? []).map((event) => ({ ...event, rsvp_count: 0 }));
 };
 
 // Fetch RSVPs for an event
