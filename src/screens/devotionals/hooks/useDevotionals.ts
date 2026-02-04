@@ -26,6 +26,7 @@ interface UseDevotionalsReturn {
   storySlides: StorySlide[];
   currentUserHasPosted: boolean;
   currentUserCompletedDaily: boolean;
+  currentUserHasUploadedImage: boolean;
   completedCount: number;
   totalMembers: number;
   currentUserStreak: number;
@@ -405,6 +406,11 @@ export const useDevotionals = (selectedDate: Date): UseDevotionalsReturn => {
     return currentUserId ? dailyCompletionUserIds.has(currentUserId) : false;
   }, [currentUserId, dailyCompletionUserIds]);
 
+  // Check if current user has uploaded an image devotional (used to show plus button for adding image even after in-app completion)
+  const currentUserHasUploadedImage = useMemo(() => {
+    return currentUserId ? devotionals.some((d) => d.user_id === currentUserId) : false;
+  }, [devotionals, currentUserId]);
+
   // Build story slides - one slide per story item (daily and/or image)
   // Members can have multiple slides (daily + image)
   const storySlides: StorySlide[] = useMemo(() => {
@@ -455,8 +461,8 @@ export const useDevotionals = (selectedDate: Date): UseDevotionalsReturn => {
     return slides;
   }, [memberSubmissions, dailyCompletionUserIds, dailyCompletions, dailyDevotionalImageUrl, currentUserId]);
 
-  // Progress counts
-  const completedCount = feedSubmissions.length;
+  // Progress counts: include anyone who completed (in-app devotional OR uploaded image)
+  const completedCount = memberSubmissions.filter((m) => m.hasPosted).length;
   const totalMembers = groupMembers.length;
 
   // Refresh handler
@@ -811,6 +817,7 @@ export const useDevotionals = (selectedDate: Date): UseDevotionalsReturn => {
     storySlides,
     currentUserHasPosted,
     currentUserCompletedDaily,
+    currentUserHasUploadedImage,
     completedCount,
     totalMembers,
     currentUserStreak: userStreak,

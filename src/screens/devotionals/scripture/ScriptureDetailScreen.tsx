@@ -14,7 +14,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../../theme/ThemeContext';
 import { Header, Button } from '../../../components';
 import { fetchChapter, BibleChapter, getVerseText } from '../../../lib/bibleApi';
-import { parseScriptureCitation } from '../../../lib/scriptureParser';
+import { parseScriptureCitationRanges } from '../../../lib/scriptureParser';
 import { useDailyDevotional } from '../hooks/useDailyDevotional';
 import { getVersesWithComments } from '../../bible/hooks/useBibleComments';
 import { VerseCommentsModal } from '../../bible/components/VerseCommentsModal';
@@ -49,15 +49,17 @@ export const ScriptureDetailScreen: React.FC = () => {
     setLoading(true);
     setError(null);
     try {
-      const parsed = parseScriptureCitation(devotional.scripture);
+      const ranges = parseScriptureCitationRanges(devotional.scripture);
       
-      if (!parsed) {
+      if (!ranges || ranges.length === 0) {
         setError('Could not parse scripture citation');
         setLoading(false);
         return;
       }
 
-      const data = await fetchChapter(parsed.book, parsed.chapter);
+      // All ranges share same book/chapter; fetch once using first range
+      const first = ranges[0];
+      const data = await fetchChapter(first.book, first.chapter);
       
       if (data) {
         setChapterData(data);
@@ -73,7 +75,8 @@ export const ScriptureDetailScreen: React.FC = () => {
     }
   }, [devotional?.scripture, devotionalLoading]);
 
-  const parsed = devotional?.scripture ? parseScriptureCitation(devotional.scripture) : null;
+  const parsedRanges = devotional?.scripture ? parseScriptureCitationRanges(devotional.scripture) : null;
+  const parsed = parsedRanges && parsedRanges.length > 0 ? parsedRanges[0] : null;
 
   const fetchVersesWithComments = useCallback(async () => {
     if (!currentGroup?.id || !parsed) return;
@@ -122,8 +125,8 @@ export const ScriptureDetailScreen: React.FC = () => {
   };
 
   const handleViewFullChapter = () => {
+    // All ranges share same book/chapter; use first for navigation
     if (!parsed) return;
-    
     navigation.navigate('ChapterView', {
       book: parsed.book,
       chapter: parsed.chapter,
@@ -178,6 +181,7 @@ export const ScriptureDetailScreen: React.FC = () => {
             <Text style={[styles.reference, { color: colors.primary }]}>
               {scriptureReference}
             </Text>
+            {/* One button only: all ranges are in the same book/chapter (e.g. 1 Timothy 6:6-12, 17-19) */}
             {parsed && (
               <TouchableOpacity
                 style={[styles.viewChapterButton, { borderColor: colors.primary }]}
@@ -191,58 +195,71 @@ export const ScriptureDetailScreen: React.FC = () => {
             )}
           </View>
 
-          {/* Scripture Text - Same styling as Bible page */}
-          <Text style={styles.chapterText}>
-            {chapterData.verses
-              .filter((verse) => {
-                // Only show verses in the range if specified
-                if (parsed) {
-                  return verse.verse >= parsed.startVerse && verse.verse <= parsed.endVerse;
-                }
-                return true;
-              })
-              .map((verse, index, filteredVerses) => {
-                const hasComments = versesWithComments.has(verse.verse);
-                const handlePress = () => handleVersePress(verse.verse);
-                return (
-                  <Text key={verse.verse}>
-                    <Text
-                      onPress={handlePress}
-                      style={[
-                        styles.verseWrapper,
-                        hasComments && {
-                          backgroundColor: isDark
-                            ? 'rgba(61, 90, 80, 0.3)'
-                            : 'rgba(61, 90, 80, 0.1)',
-                          borderRadius: 4,
-                          paddingHorizontal: 4,
-                          paddingVertical: 2,
-                        },
-                      ]}
-                    >
-                      <Text
-                        style={[
-                          styles.verseNumber,
-                          hasComments && styles.verseNumberWithComments,
-                          { color: isDark ? '#3D5A50' : colors.primary },
-                        ]}
-                      >
-                        {verse.verse}
-                      </Text>
-                      <Text
-                        style={[
-                          styles.verseText,
-                          { color: colors.text },
-                        ]}
-                      >
-                        {'  '}{verse.text}
-                      </Text>
-                    </Text>
-                    {index < filteredVerses.length - 1 && ' '}
-                  </Text>
+          {/* Scripture Text - render each range with a visual break between ranges */}
+          <View style={styles.scriptureBlock}>
+            {parsedRanges && parsedRanges.length > 0 ? (
+              parsedRanges.map((range, rangeIndex) => {
+                const versesInRange = chapterData.verses.filter(
+                  (v) => v.verse >= range.startVerse && v.verse <= range.endVerse
                 );
-              })}
-          </Text>
+                return (
+                  <React.Fragment key={`range-${range.startVerse}-${range.endVerse}`}>
+                    {rangeIndex > 0 && (
+                      <View style={[styles.rangeSeparator, { borderTopColor: colors.cardBorder }]}>
+                        <Text style={[styles.rangeSeparatorText, { color: colors.textMuted }]}>
+                          — verses {range.startVerse}–{range.endVerse} —
+                        </Text>
+                      </View>
+                    )}
+                    <Text style={styles.chapterText}>
+                      {versesInRange.map((verse, index) => {
+                        const hasComments = versesWithComments.has(verse.verse);
+                        const handlePress = () => handleVersePress(verse.verse);
+                        return (
+                          <Text key={verse.verse}>
+                            <Text
+                              onPress={handlePress}
+                              style={[
+                                styles.verseWrapper,
+                                hasComments && {
+                                  backgroundColor: isDark
+                                    ? 'rgba(61, 90, 80, 0.3)'
+                                    : 'rgba(61, 90, 80, 0.1)',
+                                  borderRadius: 4,
+                                  paddingHorizontal: 4,
+                                  paddingVertical: 2,
+                                },
+                              ]}
+                            >
+                              <Text
+                                style={[
+                                  styles.verseNumber,
+                                  hasComments && styles.verseNumberWithComments,
+                                  { color: isDark ? '#3D5A50' : colors.primary },
+                                ]}
+                              >
+                                {verse.verse}
+                              </Text>
+                              <Text
+                                style={[styles.verseText, { color: colors.text }]}
+                              >
+                                {'  '}{verse.text}
+                              </Text>
+                            </Text>
+                            {index < versesInRange.length - 1 && ' '}
+                          </Text>
+                        );
+                      })}
+                    </Text>
+                  </React.Fragment>
+                );
+              })
+            ) : (
+              <Text style={[styles.chapterText, { color: colors.text }]}>
+                No scripture ranges to display.
+              </Text>
+            )}
+          </View>
         </ScrollView>
       ) : null}
 
@@ -305,6 +322,21 @@ const styles = StyleSheet.create({
   },
   referenceContainer: {
     marginBottom: 24,
+  },
+  scriptureBlock: {
+    gap: 0,
+  },
+  rangeSeparator: {
+    marginTop: 20,
+    marginBottom: 16,
+    paddingTop: 20,
+    borderTopWidth: 1,
+    alignSelf: 'stretch',
+  },
+  rangeSeparatorText: {
+    fontSize: 14,
+    textAlign: 'center',
+    fontStyle: 'italic',
   },
   reference: {
     fontSize: 18,

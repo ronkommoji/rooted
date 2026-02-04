@@ -38,6 +38,8 @@ interface StoryRowProps {
   members: MemberSubmission[];
   currentUserId: string;
   currentUserHasPosted: boolean;
+  /** True if current user has uploaded an image devotional; plus button shows when false so they can add image (even after in-app completion) */
+  currentUserHasUploadedImage?: boolean;
   onMemberPress: (memberId: string) => void;
   onAddPress: () => void;
 }
@@ -46,6 +48,7 @@ export const StoryRow: React.FC<StoryRowProps> = ({
   members,
   currentUserId,
   currentUserHasPosted,
+  currentUserHasUploadedImage = false,
   onMemberPress,
   onAddPress,
 }) => {
@@ -87,15 +90,16 @@ export const StoryRow: React.FC<StoryRowProps> = ({
         {sortedMembers.map((member) => {
           const isCurrentUser = member.memberId === currentUserId;
           const hasPosted = member.hasPosted;
+          const canAddImage = isCurrentUser && !currentUserHasUploadedImage;
           const ringColor = hasPosted ? (isDark ? '#3D5A50' : colors.primary) : colors.cardBorder;
-          const canTap = hasPosted || (isCurrentUser && !hasPosted);
+          const canTap = hasPosted || canAddImage;
 
           return (
             <TouchableOpacity
               key={member.memberId}
               style={styles.memberContainer}
               onPress={() => {
-                if (isCurrentUser && !hasPosted) {
+                if (canAddImage) {
                   onAddPress();
                 } else if (hasPosted) {
                   onMemberPress(member.memberId);
@@ -119,8 +123,8 @@ export const StoryRow: React.FC<StoryRowProps> = ({
                   />
                 </View>
 
-                {/* Add badge for current user who hasn't posted */}
-                {isCurrentUser && !hasPosted && (
+                {/* Add badge when current user can still upload image (even after in-app completion) */}
+                {canAddImage && (
                   <View style={[styles.addBadge, { backgroundColor: isDark ? '#3D5A50' : colors.primary }]}>
                     <Ionicons name="add" size={14} color="#FFFFFF" />
                   </View>

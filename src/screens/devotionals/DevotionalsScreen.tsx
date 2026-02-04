@@ -52,6 +52,7 @@ export const DevotionalsScreen: React.FC = () => {
     storySlides,
     currentUserHasPosted,
     currentUserCompletedDaily,
+    currentUserHasUploadedImage,
     completedCount,
     totalMembers,
     currentUserStreak,
@@ -162,6 +163,7 @@ export const DevotionalsScreen: React.FC = () => {
               members={memberSubmissions}
               currentUserId={currentUserId}
               currentUserHasPosted={currentUserHasPosted}
+              currentUserHasUploadedImage={currentUserHasUploadedImage}
               onMemberPress={handleMemberStoryPress}
               onAddPress={() => setShowAddSheet(true)}
             />
@@ -200,7 +202,7 @@ export const DevotionalsScreen: React.FC = () => {
                 <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
                   Be the first to share your devotional today!
                 </Text>
-                {!currentUserHasPosted && (
+                {!currentUserHasUploadedImage && (
                   <TouchableOpacity
                     style={[styles.addButton, { backgroundColor: isDark ? '#3D5A50' : colors.primary }]}
                     onPress={() => setShowAddSheet(true)}
@@ -233,8 +235,8 @@ export const DevotionalsScreen: React.FC = () => {
         </View>
       </ScrollView>
 
-      {/* FAB for adding devotional */}
-      {!currentUserHasPosted && feedSubmissions.length > 0 && (
+      {/* FAB for adding devotional - show when user can still upload image (even after in-app completion) */}
+      {!currentUserHasUploadedImage && feedSubmissions.length > 0 && (
         <TouchableOpacity
           style={[styles.fab, { backgroundColor: isDark ? '#3D5A50' : colors.primary }]}
           onPress={() => setShowAddSheet(true)}
