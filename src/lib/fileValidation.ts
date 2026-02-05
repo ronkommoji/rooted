@@ -17,6 +17,7 @@
  *   }
  */
 
+import * as FileSystem from 'expo-file-system';
 import { logger } from './logger';
 
 export interface FileValidationResult {
@@ -61,19 +62,57 @@ export const ALLOWED_DOCUMENT_TYPES = [
 ];
 
 /**
+ * Get MIME type from file extension
+ */
+function getMimeTypeFromExtension(uri: string): string {
+  const extension = uri.split('.').pop()?.toLowerCase();
+  const mimeTypes: Record<string, string> = {
+    jpg: 'image/jpeg',
+    jpeg: 'image/jpeg',
+    png: 'image/png',
+    webp: 'image/webp',
+    heic: 'image/heic',
+    heif: 'image/heif',
+    gif: 'image/gif',
+    mp4: 'video/mp4',
+    mov: 'video/quicktime',
+    pdf: 'application/pdf',
+    doc: 'application/msword',
+    docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  };
+  return mimeTypes[extension || ''] || 'application/octet-stream';
+}
+
+/**
  * Get file information from URI
+ * Uses expo-file-system to handle all URI types including camera roll (ph://, content://)
  */
 export async function getFileInfo(uri: string): Promise<{
   size: number;
   mimeType: string;
 } | null> {
   try {
-    const response = await fetch(uri);
-    const blob = await response.blob();
+    // Use expo-file-system which handles all URI types (file://, ph://, content://, etc.)
+    const fileInfo = await FileSystem.getInfoAsync(uri);
+
+    if (!fileInfo.exists) {
+      logger.error('File does not exist', undefined, { uri });
+      return null;
+    }
+
+    // FileSystem.getInfoAsync returns size for existing files
+    const size = fileInfo.size;
+    if (size === undefined) {
+      logger.error('Could not determine file size', undefined, { uri });
+      return null;
+    }
+
+    // Infer MIME type from file extension since FileSystem doesn't provide it
+    const mimeType = getMimeTypeFromExtension(uri);
 
     return {
-      size: blob.size,
-      mimeType: blob.type,
+      size,
+      mimeType,
     };
   } catch (error) {
     logger.error('Failed to get file info', error, { uri });
