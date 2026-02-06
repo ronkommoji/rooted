@@ -44,8 +44,21 @@ export const AddDevotionalSheet: React.FC<AddDevotionalSheetProps> = ({
       setCompletedInApp(hasCompletedInAppForDate);
     } else {
       setCompletedInApp(false);
+      // Also reset loading state when modal closes
+      setLoading(false);
     }
   }, [visible, hasCompletedInAppForDate]);
+
+  // Track previous uploading state to detect when upload completes (success or failure)
+  const prevUploadingRef = React.useRef(uploading);
+  useEffect(() => {
+    // If uploading changed from true to false, the upload attempt finished
+    // Reset loading state so user can try again if there was an error
+    if (prevUploadingRef.current && !uploading && visible) {
+      setLoading(false);
+    }
+    prevUploadingRef.current = uploading;
+  }, [uploading, visible]);
 
   const requestCameraPermission = async () => {
     const { status } = await ImagePicker.requestCameraPermissionsAsync();

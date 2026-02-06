@@ -17,7 +17,7 @@
  *   }
  */
 
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 import { logger } from './logger';
 
 export interface FileValidationResult {
@@ -27,6 +27,7 @@ export interface FileValidationResult {
   mimeType?: string;
   width?: number;
   height?: number;
+  localUri?: string; // The file:// URI that can be used for upload (may differ from original URI)
 }
 
 export interface ImageDimensions {
@@ -85,34 +86,65 @@ function getMimeTypeFromExtension(uri: string): string {
 
 /**
  * Get file information from URI
- * Uses expo-file-system to handle all URI types including camera roll (ph://, content://)
+ * Handles all URI types including camera roll (ph://, content://) by copying to temp if needed
  */
 export async function getFileInfo(uri: string): Promise<{
   size: number;
   mimeType: string;
+  localUri: string; // The file:// URI that can be used for upload
 } | null> {
   try {
-    // Use expo-file-system which handles all URI types (file://, ph://, content://, etc.)
-    const fileInfo = await FileSystem.getInfoAsync(uri);
+    // Determine the MIME type from extension first
+    const mimeType = getMimeTypeFromExtension(uri);
+
+    // Check if this is already a file:// URI
+    const isFileUri = uri.startsWith('file://');
+
+    let localUri = uri;
+
+    // For non-file:// URIs (content://, ph://, assets-library://), copy to temp location
+    if (!isFileUri) {
+      logger.info('Copying non-file URI to temp location', { uriScheme: uri.split(':')[0] });
+
+      // Generate a temp file path
+      const extension = uri.split('.').pop()?.toLowerCase() || 'jpg';
+      const tempFileName = `temp_upload_${Date.now()}.${extension}`;
+      const tempUri = `${FileSystem.cacheDirectory}${tempFileName}`;
+
+      try {
+        await FileSystem.copyAsync({
+          from: uri,
+          to: tempUri,
+        });
+        localUri = tempUri;
+        logger.info('Successfully copied file to temp location', { tempUri });
+      } catch (copyError) {
+        logger.error('Failed to copy file to temp location', copyError, { uri });
+        return null;
+      }
+    }
+
+    // Now get file info from the local file:// URI
+    const fileInfo = await FileSystem.getInfoAsync(localUri);
 
     if (!fileInfo.exists) {
-      logger.error('File does not exist', undefined, { uri });
+      logger.error('File does not exist after copy', undefined, { localUri, originalUri: uri });
       return null;
     }
 
     // FileSystem.getInfoAsync returns size for existing files
     const size = fileInfo.size;
     if (size === undefined) {
-      logger.error('Could not determine file size', undefined, { uri });
+      logger.error('Could not determine file size', undefined, { localUri });
       return null;
     }
 
-    // Infer MIME type from file extension since FileSystem doesn't provide it
-    const mimeType = getMimeTypeFromExtension(uri);
+    logger.info('File info retrieved successfully', { size, mimeType, localUri });
 
     return {
       size,
       mimeType,
+      localUri,
     };
   } catch (error) {
     logger.error('Failed to get file info', error, { uri });
@@ -239,6 +271,7 @@ export async function validateImage(
       valid: true,
       fileSize: fileInfo.size,
       mimeType: fileInfo.mimeType,
+      localUri: fileInfo.localUri,
     };
   } catch (error) {
     logger.error('Image validation failed', error, { uri });
