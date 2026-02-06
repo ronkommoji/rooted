@@ -2,7 +2,7 @@
   "expo": {
     "name": "Rooted",
     "slug": "Rooted",
-    "version": "1.0.4",
+    "version": "1.0.5",
     "orientation": "portrait",
     "icon": "./assets/rootedlogo.png",
     "userInterfaceStyle": "light",
