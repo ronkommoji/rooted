@@ -481,9 +481,14 @@ export const useDevotionals = (selectedDate: Date): UseDevotionalsReturn => {
 
   // Upload image to Supabase Storage
   const uploadImage = useCallback(async (imageUri: string): Promise<string | null> => {
-    if (!currentUserId) return null;
+    if (!currentUserId) {
+      logger.error('No current user ID for upload', undefined, {});
+      return null;
+    }
 
     try {
+      logger.info('Starting image upload', { originalUri: imageUri, userId: currentUserId });
+
       // Validate image before uploading
       const validation = await validateImage(imageUri, {
         maxSize: 5 * 1024 * 1024, // 5MB limit
@@ -495,25 +500,30 @@ export const useDevotionals = (selectedDate: Date): UseDevotionalsReturn => {
         logger.error('Image validation failed', undefined, {
           error: validation.error,
           userId: currentUserId,
+          originalUri: imageUri,
         });
         throw new Error(validation.error || 'Invalid image');
       }
+
+      // Use the localUri from validation (may be a temp file:// copy of the original)
+      const uploadUri = validation.localUri || imageUri;
 
       logger.info('Image validated successfully', {
         fileSize: validation.fileSize,
         mimeType: validation.mimeType,
         userId: currentUserId,
+        uploadUri,
       });
 
       // Create file name with user ID and timestamp
-      const fileExt = imageUri.split('.').pop()?.toLowerCase() || 'jpg';
+      const fileExt = uploadUri.split('.').pop()?.toLowerCase() || 'jpg';
       const fileName = generateUniqueFilename(`devotional.${fileExt}`, currentUserId);
       const filePathWithFolder = `${currentUserId}/${fileName}`;
 
       // For React Native, we need to create a FormData and use the file URI directly
       const formData = new FormData();
       formData.append('file', {
-        uri: imageUri,
+        uri: uploadUri,
         name: fileName,
         type: validation.mimeType || `image/${fileExt === 'jpg' ? 'jpeg' : fileExt}`,
       } as any);
