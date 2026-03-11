@@ -13,6 +13,25 @@ import { subscribeDailyDevotionalCompletion } from '../../../lib/dailyDevotional
 // Cache duration: 2 minutes for devotionals data
 const DEVOTIONALS_CACHE_DURATION_MS = 2 * 60 * 1000;
 
+// --- Module-level shared state for cross-instance optimistic uploads ---
+// Multiple screens (Home, Devotionals) each mount their own useDevotionals
+// instance.  When one screen starts an optimistic upload the others need to
+// know about it so the temp entry appears everywhere and gets cleaned up once
+// the real DB write lands.
+type PendingOptimistic = {
+  entry: DevotionalWithProfile;
+  tempId: string;
+};
+
+let _pendingOptimistic: PendingOptimistic | null = null;
+const _pendingSubscribers = new Set<(p: PendingOptimistic | null) => void>();
+
+function _setPendingOptimistic(p: PendingOptimistic | null) {
+  _pendingOptimistic = p;
+  _pendingSubscribers.forEach((fn) => fn(p));
+}
+// --- end shared state ---
+
 // Types
 export interface DevotionalWithProfile extends Devotional {
   profiles: Profile;
@@ -65,8 +84,45 @@ export const useDevotionals = (selectedDate: Date): UseDevotionalsReturn => {
     likedDevotionalIds: Set<string>;
   }>>({});
 
+  // Stable ref so the pending-optimistic subscriber can call fetchDevotionals
+  // without being in its dependency array.
+  const fetchDevotionalsRef = useRef<(force?: boolean) => Promise<void>>(async () => {});
+
   const selectedDateISO = format(selectedDate, 'yyyy-MM-dd');
   const currentUserId = session?.user?.id;
+
+  // Subscribe to cross-instance optimistic uploads so every mounted
+  // useDevotionals instance shows the temp entry and cleans up on completion.
+  useEffect(() => {
+    const handler = (pending: PendingOptimistic | null) => {
+      if (pending && pending.entry.post_date === selectedDateISO) {
+        setDevotionals((prev) => {
+          if (prev.some((d) => d.id === pending.tempId)) return prev;
+          return [...prev, pending.entry];
+        });
+      }
+      if (!pending) {
+        // Upload finished (success or failure) — refetch so every instance
+        // converges on real DB state.
+        lastFetchTime.current[selectedDateISO] = 0;
+        fetchDevotionalsRef.current(true);
+      }
+    };
+
+    _pendingSubscribers.add(handler);
+
+    // Check for an existing pending upload on mount (covers navigation case)
+    if (_pendingOptimistic && _pendingOptimistic.entry.post_date === selectedDateISO) {
+      setDevotionals((prev) => {
+        if (prev.some((d) => d.id === _pendingOptimistic!.tempId)) return prev;
+        return [...prev, _pendingOptimistic!.entry];
+      });
+    }
+
+    return () => {
+      _pendingSubscribers.delete(handler);
+    };
+  }, [selectedDateISO]);
 
   // Fetch daily devotional image for selected date
   useEffect(() => {
@@ -229,6 +285,8 @@ export const useDevotionals = (selectedDate: Date): UseDevotionalsReturn => {
       setLoading(false);
     }
   }, [currentGroup?.id, currentUserId, selectedDateISO, groupMembers.length, fetchGroupMembers]);
+
+  fetchDevotionalsRef.current = fetchDevotionals;
 
   // Initial fetch - check cache first before setting loading
   useEffect(() => {
@@ -643,7 +701,9 @@ export const useDevotionals = (selectedDate: Date): UseDevotionalsReturn => {
   }, [currentGroup?.id, currentUserId, selectedDateISO, fetchDevotionals, profile]);
 
   // Optimistic add: instantly shows local image in feed, uploads in background.
-  // If upload or DB insert fails, removes the temp entry and notifies the user.
+  // Broadcasts to ALL mounted useDevotionals instances (Home + Devotionals screens)
+  // so the temp entry appears everywhere. On completion the shared state is cleared
+  // which triggers a refetch in every instance.
   const addDevotionalOptimistic = useCallback((localImageUri: string) => {
     if (!currentGroup?.id || !currentUserId || !profile) return;
 
@@ -664,6 +724,7 @@ export const useDevotionals = (selectedDate: Date): UseDevotionalsReturn => {
     } as DevotionalWithProfile;
 
     setDevotionals((prev) => [...prev, optimisticEntry]);
+    _setPendingOptimistic({ entry: optimisticEntry, tempId });
 
     (async () => {
       try {
@@ -676,6 +737,8 @@ export const useDevotionals = (selectedDate: Date): UseDevotionalsReturn => {
           'Upload Failed',
           error?.message || 'Failed to upload your devotional. Please try again.',
         );
+      } finally {
+        _setPendingOptimistic(null);
       }
     })();
   }, [currentGroup?.id, currentUserId, selectedDateISO, profile, uploadImage, addDevotional]);

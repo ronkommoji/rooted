@@ -308,7 +308,6 @@ export const HomeScreen: React.FC = () => {
             Alert.alert('Error', error.message || 'Failed to complete daily devotional');
           }
         }}
-        uploading={uploading}
         hasCompletedInAppForDate={currentUserCompletedDaily}
         hasPostedImageToday={currentUserHasImagePost}
       />

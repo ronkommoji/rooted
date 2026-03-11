@@ -26,7 +26,7 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
 
   return (
     <View style={styles.container}>
-      <View style={[styles.iconContainer, { backgroundColor: colors.accent + '30' }]}>
+      <View style={[styles.iconContainer, { backgroundColor: primaryColor + '15' }]}>
         <Icon name={icon} size={32} color={primaryColor} />
       </View>
       <Text style={[styles.title, { color: colors.text }]}>{title}</Text>
