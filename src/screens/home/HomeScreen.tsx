@@ -68,6 +68,7 @@ export const HomeScreen: React.FC = () => {
     storySlides,
     currentUserHasPosted,
     currentUserCompletedDaily,
+    currentUserHasImagePost,
     loading: loadingDevotionals,
     onRefresh: refreshDevotionals,
     addDevotional,
@@ -191,7 +192,7 @@ export const HomeScreen: React.FC = () => {
       // Navigate to Devotionals page
       navigation.navigate('Devotionals');
     } catch (error: any) {
-      Alert.alert('Error', error.message || 'Failed to add devotional');
+      Alert.alert('Error', error?.message || 'Failed to upload image. Please try again.');
     } finally {
       setUploading(false);
     }
@@ -322,6 +323,7 @@ export const HomeScreen: React.FC = () => {
         }}
         uploading={uploading}
         hasCompletedInAppForDate={currentUserCompletedDaily}
+        hasPostedImageToday={currentUserHasImagePost}
       />
 
       {/* Challenge Detail Modal */}
@@ -335,7 +337,10 @@ export const HomeScreen: React.FC = () => {
       <FABMenu
         onPrayerPress={() => setShowPrayerModal(true)}
         onEventPress={() => setShowEventModal(true)}
-        onDevotionalPress={() => setShowAddDevotional(true)}
+        onDevotionalPress={() => {
+          setShowAddDevotional(true);
+          refreshDevotionals(); // Fresh data so hasPostedImageToday is correct (e.g. after delete on Devotionals)
+        }}
       />
 
       {/* Prayer Creation Modal */}

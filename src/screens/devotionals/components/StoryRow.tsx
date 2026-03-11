@@ -115,6 +115,7 @@ export const StoryRow: React.FC<StoryRowProps> = ({
                     name={member.memberName}
                     imageUrl={member.avatarUrl}
                     size={52}
+                    backgroundColor={isDark ? '#3A3A3A' : undefined}
                   />
                 </View>
               </View>

@@ -287,7 +287,8 @@ export const getVerseComments = async (
 };
 
 /**
- * Add a comment to a verse
+ * Add a comment to a verse.
+ * Multiple comments per user per verse are allowed (no one-comment limit).
  */
 export const addVerseComment = async (
   book: string,
@@ -297,33 +298,31 @@ export const addVerseComment = async (
   groupId: string,
   userId: string
 ): Promise<BibleComment | null> => {
-  try {
-    const { data, error } = await supabase
-      .from('bible_comments')
-      .insert({
-        group_id: groupId,
-        user_id: userId,
-        book,
-        chapter,
-        verse,
-        content,
-      })
-      .select(`
-        *,
-        profiles (
-          id,
-          full_name,
-          avatar_url
-        )
-      `)
-      .single();
+  const { data, error } = await supabase
+    .from('bible_comments')
+    .insert({
+      group_id: groupId,
+      user_id: userId,
+      book,
+      chapter,
+      verse,
+      content,
+    })
+    .select(`
+      *,
+      profiles (
+        id,
+        full_name,
+        avatar_url
+      )
+    `)
+    .single();
 
-    if (error) throw error;
-    return data as BibleComment;
-  } catch (error) {
+  if (error) {
     console.error('Error adding verse comment:', error);
-    return null;
+    throw error; // Propagate so UI can show e.g. "duplicate key" or real message
   }
+  return data as BibleComment;
 };
 
 /**

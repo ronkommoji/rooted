@@ -570,7 +570,7 @@ export const useDevotionals = (selectedDate: Date): UseDevotionalsReturn => {
       return urlData.publicUrl;
     } catch (error) {
       logger.error('Error in uploadImage', error as Error, { userId: currentUserId });
-      return null;
+      throw error; // Propagate so caller can show validation message (e.g. "File size exceeds 5.0 MB limit")
     }
   }, [currentUserId]);
 
@@ -734,6 +734,28 @@ export const useDevotionals = (selectedDate: Date): UseDevotionalsReturn => {
         return;
       }
 
+      // Remove from UI immediately (optimistic update) so list and story row update without refresh
+      setDevotionals((prev) => prev.filter((d) => d.id !== devotionalId));
+      setLikedDevotionalIds((prev) => {
+        const next = new Set(prev);
+        next.delete(devotionalId);
+        return next;
+      });
+      // Update cache so it doesn’t overwrite with stale data
+      if (cachedData.current[selectedDateISO]) {
+        const cached = cachedData.current[selectedDateISO];
+        cachedData.current[selectedDateISO] = {
+          ...cached,
+          devotionals: cached.devotionals.filter((d) => d.id !== devotionalId),
+          likedDevotionalIds: (() => {
+            const next = new Set(cached.likedDevotionalIds);
+            next.delete(devotionalId);
+            return next;
+          })(),
+        };
+      }
+      lastFetchTime.current[selectedDateISO] = 0;
+
       // Try to delete the image from storage (optional, don't fail if this fails)
       if (devotional.image_url) {
         try {
@@ -747,14 +769,11 @@ export const useDevotionals = (selectedDate: Date): UseDevotionalsReturn => {
           console.warn('Could not delete storage file:', storageError);
         }
       }
-
-      // Refresh data
-      await fetchDevotionals();
     } catch (error) {
       console.error('Error in deleteDevotional:', error);
       throw error;
     }
-  }, [currentUserId, devotionals, fetchDevotionals]);
+  }, [currentUserId, devotionals, selectedDateISO]);
 
   // Toggle like on devotional
   const toggleLike = useCallback(async (devotionalId: string) => {

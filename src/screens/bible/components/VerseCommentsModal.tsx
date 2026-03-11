@@ -104,7 +104,7 @@ export const VerseCommentsModal: React.FC<VerseCommentsModalProps> = ({
       keyboardWillShow.remove();
       keyboardWillHide.remove();
     };
-  }, [visible]);
+  }, [visible, scrollToBottom]);
 
   const scrollToBottom = useCallback(() => {
     if (comments.length > 0 && flatListRef.current) {
@@ -216,12 +216,14 @@ export const VerseCommentsModal: React.FC<VerseCommentsModalProps> = ({
 
     return (
       <View style={styles.commentItem}>
-        <Avatar
-          name={item.profiles?.full_name || 'Unknown'}
-          imageUrl={item.profiles?.avatar_url}
-          size={32}
-          backgroundColor={colors.primary}
-        />
+        <View style={styles.commentAvatarWrapper}>
+          <Avatar
+            name={item.profiles?.full_name || 'Unknown'}
+            imageUrl={item.profiles?.avatar_url}
+            size={32}
+            backgroundColor={colors.primary}
+          />
+        </View>
         <View style={styles.commentContent}>
           <View style={styles.commentHeader}>
             <Text style={[styles.commentAuthor, { color: colors.text }]}>
@@ -280,7 +282,7 @@ export const VerseCommentsModal: React.FC<VerseCommentsModalProps> = ({
           <Text style={[styles.verseText, { color: colors.text }]}>"{verseText}"</Text>
         </View>
 
-        {/* Comments List */}
+        {/* Comments List - Same padding as devotional CommentsModal */}
         <View
           style={[
             styles.contentContainer,
@@ -321,7 +323,7 @@ export const VerseCommentsModal: React.FC<VerseCommentsModalProps> = ({
           )}
         </View>
 
-        {/* Comment Input */}
+        {/* Comment Input - Match devotional CommentsModal layout */}
         <View
           style={[
             styles.inputContainer,
@@ -334,12 +336,14 @@ export const VerseCommentsModal: React.FC<VerseCommentsModalProps> = ({
             },
           ]}
         >
-          <Avatar
-            name={profile?.full_name || 'You'}
-            imageUrl={profile?.avatar_url}
-            size={32}
-            backgroundColor={colors.primary}
-          />
+          <View style={styles.inputAvatarWrapper}>
+            <Avatar
+              name={profile?.full_name || 'You'}
+              imageUrl={profile?.avatar_url}
+              size={32}
+              backgroundColor={colors.primary}
+            />
+          </View>
           <TextInput
             style={[
               styles.input,
@@ -374,9 +378,7 @@ export const VerseCommentsModal: React.FC<VerseCommentsModalProps> = ({
                   styles.sendButtonText,
                   {
                     color: newComment.trim()
-                      ? isDark
-                        ? '#3D5A50'
-                        : colors.primary
+                      ? (isDark ? '#3D5A50' : colors.primary)
                       : colors.textMuted,
                   },
                 ]}
@@ -477,17 +479,8 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     alignItems: 'flex-start',
   },
-  commentAvatar: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 12,
-  },
-  commentAvatarText: {
-    fontSize: 12,
-    fontWeight: '600',
+  commentAvatarWrapper: {
+    marginRight: 8,
   },
   commentContent: {
     flex: 1,
@@ -521,17 +514,8 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
   },
-  inputAvatar: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 12,
-  },
-  inputAvatarText: {
-    fontSize: 12,
-    fontWeight: '600',
+  inputAvatarWrapper: {
+    marginRight: 14,
   },
   input: {
     flex: 1,

@@ -11,6 +11,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
+import * as FileSystem from 'expo-file-system/legacy';
 import { useTheme } from '../../../theme/ThemeContext';
 import { useDailyDevotional } from '../hooks/useDailyDevotional';
 
@@ -21,7 +22,12 @@ interface AddDevotionalSheetProps {
   onDailyDevotionalComplete?: () => void;
   uploading?: boolean;
   hasCompletedInAppForDate?: boolean;
+  /** When true, user has already posted one image (camera or library) today. Blocks only adding another image; in-app devotional can still be completed and paired with that one image. */
+  hasPostedImageToday?: boolean;
 }
+
+const ONE_PHOTO_PER_DAY_MSG =
+  'You can only add one photo per day (from camera or library). You can still complete the in-app devotional if you haven’t yet.';
 
 export const AddDevotionalSheet: React.FC<AddDevotionalSheetProps> = ({
   visible,
@@ -30,6 +36,7 @@ export const AddDevotionalSheet: React.FC<AddDevotionalSheetProps> = ({
   onDailyDevotionalComplete,
   uploading = false,
   hasCompletedInAppForDate = false,
+  hasPostedImageToday = false,
 }) => {
   const { colors, isDark } = useTheme();
   const [loading, setLoading] = useState(false);
@@ -87,6 +94,10 @@ export const AddDevotionalSheet: React.FC<AddDevotionalSheetProps> = ({
   };
 
   const handleTakePhoto = async () => {
+    if (hasPostedImageToday) {
+      Alert.alert('One photo per day', ONE_PHOTO_PER_DAY_MSG, [{ text: 'OK' }]);
+      return;
+    }
     const hasPermission = await requestCameraPermission();
     if (!hasPermission) return;
 
@@ -114,6 +125,10 @@ export const AddDevotionalSheet: React.FC<AddDevotionalSheetProps> = ({
   };
 
   const handleUploadFromLibrary = async () => {
+    if (hasPostedImageToday) {
+      Alert.alert('One photo per day', ONE_PHOTO_PER_DAY_MSG, [{ text: 'OK' }]);
+      return;
+    }
     const hasPermission = await requestMediaLibraryPermission();
     if (!hasPermission) return;
 
@@ -123,15 +138,36 @@ export const AddDevotionalSheet: React.FC<AddDevotionalSheetProps> = ({
         mediaTypes: ['images'],
         allowsEditing: false, // Allow full image without forced crop - Instagram style
         quality: 0.8,
+        base64: true, // Ensures we can write to a temp file:// URI for reliable upload (iOS library URIs like ph:// often fail)
       });
 
-      if (!result.canceled && result.assets[0]?.uri) {
-        // Don't close modal here - let the parent handle closing after upload completes
-        // The parent will close the modal when upload finishes
-        onImageSelected(result.assets[0].uri);
-        // Keep loading state true - parent will handle closing and resetting
+      if (!result.canceled && result.assets[0]) {
+        const asset = result.assets[0];
+        const uri = asset.uri;
+        const base64 = asset.base64;
+
+        let uriToUse = uri;
+        if (base64 && uri && !uri.startsWith('file://')) {
+          // iOS (and some Android) can return ph:// or content:// URIs that fail at upload.
+          // Write to a temp file so upload always gets a file:// URI.
+          try {
+            const ext = (uri.split('.').pop()?.toLowerCase() || 'jpg').replace(/\?.*$/, '');
+            const safeExt = ['jpg', 'jpeg', 'png', 'webp', 'heic'].includes(ext) ? ext : 'jpg';
+            const tempPath = `${FileSystem.cacheDirectory}devotional_upload_${Date.now()}.${safeExt}`;
+            await FileSystem.writeAsStringAsync(tempPath, base64, {
+              encoding: FileSystem.EncodingType.Base64,
+            });
+            uriToUse = tempPath;
+          } catch (writeErr) {
+            console.error('Error writing library image to temp file:', writeErr);
+            Alert.alert('Error', 'Failed to prepare image for upload. Please try again.');
+            setLoading(false);
+            return;
+          }
+        }
+
+        onImageSelected(uriToUse);
       } else {
-        // User canceled - reset loading
         setLoading(false);
       }
     } catch (error) {

@@ -47,13 +47,13 @@ export const ChallengeCard: React.FC<ChallengeCardProps> = ({ challenge, onPress
 
           {/* View Button - on far right, vertically centered */}
           <TouchableOpacity
-            style={[styles.viewButton, { backgroundColor: isDark ? colors.primary : iconColor + '30' }]}
+            style={[styles.viewButton, { backgroundColor: iconColor + '30' }]}
             onPress={(e) => {
               e.stopPropagation();
               onPress();
             }}
           >
-            <Text style={[styles.viewButtonText, { color: isDark ? colors.background : iconColor }]}>View</Text>
+            <Text style={[styles.viewButtonText, { color: '#FFFFFF' }]}>View</Text>
           </TouchableOpacity>
         </View>
       </View>

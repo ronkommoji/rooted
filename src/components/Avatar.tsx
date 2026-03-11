@@ -30,9 +30,13 @@ export const Avatar: React.FC<AvatarProps> = ({
   };
 
   const initials = getInitials(name);
-  
-  // Use custom backgroundColor if provided, otherwise use neutral beige/gray
-  const avatarBg = backgroundColor || (isDark ? '#3A3A3A' : '#E8E7E2');
+
+  const storyRowDarkBg = '#3A3A3A';
+  // In dark mode, keep the story row's explicit gray override.
+  // All other avatars should use the darker green for better contrast.
+  const avatarBg = isDark
+    ? (backgroundColor === storyRowDarkBg ? storyRowDarkBg : '#3D5A50')
+    : (backgroundColor || '#E8E7E2');
   
   const containerStyle = {
     width: size,

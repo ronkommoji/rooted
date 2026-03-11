@@ -103,7 +103,7 @@ export const DailyDevotionalCard: React.FC<DailyDevotionalCardProps> = ({
               key={i}
               style={[
                 styles.item,
-                { backgroundColor: isDark ? '#2A2A2A' : '#F5F4F0' },
+                { backgroundColor: isDark ? '#1E1E1E' : '#F5F4F0' },
               ]}
             >
               <View style={styles.itemLeft}>
@@ -176,7 +176,7 @@ export const DailyDevotionalCard: React.FC<DailyDevotionalCardProps> = ({
         <TouchableOpacity
           style={[
             styles.item,
-            { backgroundColor: isDark ? '#2A2A2A' : '#F5F4F0' },
+            { backgroundColor: isDark ? '#1E1E1E' : '#F5F4F0' },
           ]}
           onPress={handleScripturePress}
           activeOpacity={0.7}
@@ -211,7 +211,7 @@ export const DailyDevotionalCard: React.FC<DailyDevotionalCardProps> = ({
         <TouchableOpacity
           style={[
             styles.item,
-            { backgroundColor: isDark ? '#2A2A2A' : '#F5F4F0' },
+            { backgroundColor: isDark ? '#1E1E1E' : '#F5F4F0' },
           ]}
           onPress={handleDevotionalPress}
           activeOpacity={0.7}
@@ -246,7 +246,7 @@ export const DailyDevotionalCard: React.FC<DailyDevotionalCardProps> = ({
         <TouchableOpacity
           style={[
             styles.item,
-            { backgroundColor: isDark ? '#2A2A2A' : '#F5F4F0' },
+            { backgroundColor: isDark ? '#1E1E1E' : '#F5F4F0' },
           ]}
           onPress={handlePrayerPress}
           activeOpacity={0.7}

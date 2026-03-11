@@ -102,7 +102,7 @@ export const DevotionalsScreen: React.FC = () => {
       });
     } catch (error: any) {
       console.error('Error adding devotional:', error);
-      Alert.alert('Error', error.message || 'Failed to add devotional');
+      Alert.alert('Error', error?.message || 'Failed to upload image. Please try again.');
     } finally {
       setUploading(false);
     }
@@ -205,7 +205,10 @@ export const DevotionalsScreen: React.FC = () => {
                 {!currentUserHasImagePost && (
                   <TouchableOpacity
                     style={[styles.addButton, { backgroundColor: isDark ? '#3D5A50' : colors.primary }]}
-                    onPress={() => setShowAddSheet(true)}
+                    onPress={() => {
+                      setShowAddSheet(true);
+                      onRefresh(); // Fresh data so hasPostedImageToday is correct (e.g. after delete)
+                    }}
                   >
                     <Ionicons name="add" size={20} color="#FFFFFF" />
                     <Text style={styles.addButtonText}>
@@ -239,7 +242,10 @@ export const DevotionalsScreen: React.FC = () => {
       {!currentUserHasImagePost && feedSubmissions.length > 0 && (
         <TouchableOpacity
           style={[styles.fab, { backgroundColor: isDark ? '#3D5A50' : colors.primary }]}
-          onPress={() => setShowAddSheet(true)}
+          onPress={() => {
+            setShowAddSheet(true);
+            onRefresh(); // Fresh data so hasPostedImageToday is correct (e.g. after delete)
+          }}
         >
           <Ionicons name="add" size={28} color="#FFFFFF" />
         </TouchableOpacity>
@@ -260,6 +266,7 @@ export const DevotionalsScreen: React.FC = () => {
         }}
         uploading={uploading}
         hasCompletedInAppForDate={currentUserCompletedDaily}
+        hasPostedImageToday={currentUserHasImagePost}
       />
 
       {/* Story Viewer Modal */}
