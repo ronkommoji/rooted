@@ -7,8 +7,8 @@ import {
   RefreshControl,
   TouchableOpacity,
   Alert,
-  Image,
 } from 'react-native';
+import { Image as ExpoImage } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
@@ -24,6 +24,7 @@ import { useRecentPrayersQuery, useRecentEventsQuery, useEventRsvpsQuery } from 
 import { useQueryClient } from '@tanstack/react-query';
 import { queryKeys } from '../../lib/queryKeys';
 import { fetchUserProfile } from '../../lib/profileApi';
+import { getImageThumbnail } from '../../lib/imageUtils';
 import {
   DevotionalSection,
   EventListSection,
@@ -52,7 +53,6 @@ export const HomeScreen: React.FC = () => {
   const [showStoryViewer, setShowStoryViewer] = useState(false);
   const [storyViewerStartMember, setStoryViewerStartMember] = useState('');
   const [showAddDevotional, setShowAddDevotional] = useState(false);
-  const [uploading, setUploading] = useState(false);
 
   // Challenge modal state
   const [showChallengeModal, setShowChallengeModal] = useState(false);
@@ -71,9 +71,8 @@ export const HomeScreen: React.FC = () => {
     currentUserHasImagePost,
     loading: loadingDevotionals,
     onRefresh: refreshDevotionals,
-    addDevotional,
+    addDevotionalOptimistic,
     addDailyDevotional,
-    uploadImage,
   } = useDevotionals(today);
 
   const currentUserId = session?.user?.id || '';
@@ -118,13 +117,14 @@ export const HomeScreen: React.FC = () => {
           gcTime: 15 * 60 * 1000,
         })
         .then((data) => {
-          // Prefetch profile devotional images so they're cached when user opens Profile
           if (data?.devotionals?.length) {
-            data.devotionals.forEach((d) => {
-              if (d.image_url?.trim()) {
-                Image.prefetch(d.image_url).catch(() => {});
-              }
-            });
+            const thumbnailUrls = data.devotionals
+              .slice(0, 15)
+              .map((d) => getImageThumbnail(d.image_url, 400))
+              .filter((url): url is string => !!url?.trim());
+            if (thumbnailUrls.length > 0) {
+              ExpoImage.prefetch(thumbnailUrls).catch(() => {});
+            }
           }
         })
         .catch(() => {});
@@ -179,23 +179,10 @@ export const HomeScreen: React.FC = () => {
     navigation.navigate('Profile', { userId: memberId });
   };
 
-  const handleAddDevotional = async (imageUri: string) => {
-    setUploading(true);
-    try {
-      const imageUrl = await uploadImage(imageUri);
-      if (!imageUrl) {
-        Alert.alert('Error', 'Failed to upload image. Please try again.');
-        return;
-      }
-      await addDevotional(imageUrl);
-      setShowAddDevotional(false);
-      // Navigate to Devotionals page
-      navigation.navigate('Devotionals');
-    } catch (error: any) {
-      Alert.alert('Error', error?.message || 'Failed to upload image. Please try again.');
-    } finally {
-      setUploading(false);
-    }
+  const handleAddDevotional = (imageUri: string) => {
+    setShowAddDevotional(false);
+    addDevotionalOptimistic(imageUri);
+    navigation.navigate('Devotionals');
   };
 
   const handlePrayerCreated = () => {

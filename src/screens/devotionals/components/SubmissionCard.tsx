@@ -3,13 +3,14 @@ import {
   View, 
   Text, 
   StyleSheet, 
-  Image, 
   TouchableOpacity, 
   Modal,
   Alert,
   ActivityIndicator,
   Dimensions,
+  PixelRatio,
 } from 'react-native';
+import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { useTheme } from '../../../theme/ThemeContext';
@@ -103,22 +104,15 @@ export const SubmissionCard: React.FC<SubmissionCardProps> = React.memo(({
     fetchCommentData();
   }, [fetchCommentData]);
 
-  // Refine aspect ratio in background when dimensions load (don't block image display)
-  useEffect(() => {
-    if (!submission.imageUrl) return;
-    Image.getSize(
-      submission.imageUrl,
-      (width, height) => {
-        let ratio = width / height;
-        if (ratio < MAX_ASPECT_RATIO) ratio = MAX_ASPECT_RATIO;
-        else if (ratio > MIN_ASPECT_RATIO) ratio = MIN_ASPECT_RATIO;
-        setImageAspectRatio(ratio);
-      },
-      () => {
-        // Keep default 1:1 on error - image still displays
-      }
-    );
-  }, [submission.imageUrl]);
+  const handleImageLoad = useCallback((event: { source: { width: number; height: number } }) => {
+    const { width, height } = event.source;
+    if (width > 0 && height > 0) {
+      let ratio = width / height;
+      if (ratio < MAX_ASPECT_RATIO) ratio = MAX_ASPECT_RATIO;
+      else if (ratio > MIN_ASPECT_RATIO) ratio = MIN_ASPECT_RATIO;
+      setImageAspectRatio(ratio);
+    }
+  }, []);
 
   const getTimeAgo = (dateString: string | null) => {
     if (!dateString) return '';
@@ -219,7 +213,11 @@ export const SubmissionCard: React.FC<SubmissionCardProps> = React.memo(({
           <Image
             source={{ uri: submission.imageUrl || '' }}
             style={[styles.image, { aspectRatio: imageAspectRatio }]}
-            resizeMode="cover"
+            contentFit="cover"
+            transition={200}
+            cachePolicy="memory-disk"
+            placeholder={{ blurhash: 'L6PZfSi_.AyE_3t7t7R**0o#DgR4' }}
+            onLoad={handleImageLoad}
           />
         )}
       </TouchableOpacity>

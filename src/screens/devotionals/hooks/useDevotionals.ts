@@ -1,4 +1,5 @@
 import { useState, useCallback, useMemo, useEffect, useRef } from 'react';
+import { Alert } from 'react-native';
 import { format, subDays, isAfter, parseISO } from 'date-fns';
 import { supabase, supabaseUrl } from '../../../lib/supabase';
 import { useAppStore } from '../../../store/useAppStore';
@@ -39,7 +40,8 @@ interface UseDevotionalsReturn {
   fetchDevotionals: () => Promise<void>;
   onRefresh: () => Promise<void>;
   addDevotional: (imageUrl: string) => Promise<void>;
-  addDailyDevotional: () => Promise<void>; // For completing daily devotional (all 3 items)
+  addDevotionalOptimistic: (localImageUri: string) => void;
+  addDailyDevotional: () => Promise<void>;
   deleteDevotional: (devotionalId: string) => Promise<void>;
   toggleLike: (devotionalId: string) => Promise<void>;
   uploadImage: (imageUri: string) => Promise<string | null>;
@@ -640,6 +642,44 @@ export const useDevotionals = (selectedDate: Date): UseDevotionalsReturn => {
     }
   }, [currentGroup?.id, currentUserId, selectedDateISO, fetchDevotionals, profile]);
 
+  // Optimistic add: instantly shows local image in feed, uploads in background.
+  // If upload or DB insert fails, removes the temp entry and notifies the user.
+  const addDevotionalOptimistic = useCallback((localImageUri: string) => {
+    if (!currentGroup?.id || !currentUserId || !profile) return;
+
+    const tempId = `temp-${Date.now()}`;
+
+    const optimisticEntry: DevotionalWithProfile = {
+      id: tempId,
+      group_id: currentGroup.id,
+      user_id: currentUserId,
+      image_url: localImageUri,
+      content: null,
+      post_date: selectedDateISO,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      profiles: profile,
+      likes_count: 0,
+      user_liked: false,
+    } as DevotionalWithProfile;
+
+    setDevotionals((prev) => [...prev, optimisticEntry]);
+
+    (async () => {
+      try {
+        const publicUrl = await uploadImage(localImageUri);
+        if (!publicUrl) throw new Error('Failed to upload image');
+        await addDevotional(publicUrl);
+      } catch (error: any) {
+        setDevotionals((prev) => prev.filter((d) => d.id !== tempId));
+        Alert.alert(
+          'Upload Failed',
+          error?.message || 'Failed to upload your devotional. Please try again.',
+        );
+      }
+    })();
+  }, [currentGroup?.id, currentUserId, selectedDateISO, profile, uploadImage, addDevotional]);
+
   // Update user streak
   const updateStreak = useCallback(async () => {
     if (!currentGroup?.id || !currentUserId) return;
@@ -877,6 +917,7 @@ export const useDevotionals = (selectedDate: Date): UseDevotionalsReturn => {
     fetchDevotionals,
     onRefresh,
     addDevotional,
+    addDevotionalOptimistic,
     addDailyDevotional,
     deleteDevotional,
     toggleLike,

@@ -43,8 +43,6 @@ export const DevotionalsScreen: React.FC = () => {
   const [showAddSheet, setShowAddSheet] = useState(false);
   const [showStoryViewer, setShowStoryViewer] = useState(false);
   const [storyViewerStartMember, setStoryViewerStartMember] = useState('');
-  const [uploading, setUploading] = useState(false);
-
   // Enable realtime subscriptions for devotionals
   useDevotionalsRealtime();
 
@@ -62,11 +60,10 @@ export const DevotionalsScreen: React.FC = () => {
     loading,
     refreshing,
     onRefresh,
-    addDevotional,
+    addDevotionalOptimistic,
     addDailyDevotional,
     deleteDevotional,
     toggleLike,
-    uploadImage,
   } = useDevotionals(selectedDate);
 
   const currentUserId = session?.user?.id || '';
@@ -86,26 +83,9 @@ export const DevotionalsScreen: React.FC = () => {
     navigation.navigate('Profile', { userId: memberId });
   };
 
-  const handleAddDevotional = async (imageUri: string) => {
-    setUploading(true);
-    try {
-      const publicUrl = await uploadImage(imageUri);
-      if (!publicUrl) {
-        Alert.alert('Error', 'Failed to upload image. Please try again.');
-        return;
-      }
-      // Close modal as soon as upload succeeds; insert runs in background and post appears via optimistic update
-      setShowAddSheet(false);
-      addDevotional(publicUrl).catch((err: any) => {
-        console.error('Error adding devotional:', err);
-        Alert.alert('Error', err?.message || 'Failed to add devotional');
-      });
-    } catch (error: any) {
-      console.error('Error adding devotional:', error);
-      Alert.alert('Error', error?.message || 'Failed to upload image. Please try again.');
-    } finally {
-      setUploading(false);
-    }
+  const handleAddDevotional = (imageUri: string) => {
+    setShowAddSheet(false);
+    addDevotionalOptimistic(imageUri);
   };
 
   const handleLikePress = (memberId: string) => {
@@ -264,7 +244,6 @@ export const DevotionalsScreen: React.FC = () => {
             Alert.alert('Error', error.message || 'Failed to complete daily devotional');
           }
         }}
-        uploading={uploading}
         hasCompletedInAppForDate={currentUserCompletedDaily}
         hasPostedImageToday={currentUserHasImagePost}
       />

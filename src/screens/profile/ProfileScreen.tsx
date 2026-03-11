@@ -1,16 +1,16 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  ActivityIndicator,
   Dimensions,
   Modal,
-  Image,
+  FlatList,
   Alert,
 } from 'react-native';
+import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
@@ -24,6 +24,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { fetchUserProfile } from '../../lib/profileApi';
 import type { DevotionalWithEngagement } from '../../lib/profileApi';
 import { pickAndUploadAvatar, showAvatarSourceOptions, updateProfileAvatar } from '../../lib/avatarUpload';
+import { getImageThumbnail } from '../../lib/imageUtils';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const GRID_PADDING = 20;
@@ -275,6 +276,51 @@ export const ProfileScreen: React.FC = () => {
 
   const { profile, stats, devotionals, prayers } = profileData;
 
+  const renderDevotionalItem = useCallback(({ item: devotional, index }: { item: DevotionalWithEngagement; index: number }) => {
+    const thumbnailUrl = getImageThumbnail(devotional.image_url, 400);
+    return (
+      <TouchableOpacity
+        key={devotional.id}
+        style={styles.gridItem}
+        onPress={() =>
+          navigation.navigate('UserDevotionalsList', {
+            userId: userId,
+            userName: profile.full_name || 'User',
+            initialDevotionalId: devotional.id,
+          })
+        }
+        activeOpacity={0.9}
+      >
+        <Image
+          source={{ uri: thumbnailUrl || '' }}
+          style={styles.gridImage}
+          contentFit="cover"
+          transition={200}
+          priority={index < 6 ? 'high' : 'normal'}
+          cachePolicy="memory-disk"
+          placeholder={{ blurhash: 'L6PZfSi_.AyE_3t7t7R**0o#DgR4' }}
+          recyclingKey={devotional.id}
+        />
+        <View style={styles.gridOverlay}>
+          {devotional.likes_count > 0 && (
+            <View style={styles.gridStat}>
+              <Ionicons name="heart" size={14} color="#FFFFFF" />
+              <Text style={styles.gridStatText}>{devotional.likes_count}</Text>
+            </View>
+          )}
+          {devotional.comments_count > 0 && (
+            <View style={styles.gridStat}>
+              <Ionicons name="chatbubble" size={14} color="#FFFFFF" />
+              <Text style={styles.gridStatText}>{devotional.comments_count}</Text>
+            </View>
+          )}
+        </View>
+      </TouchableOpacity>
+    );
+  }, [navigation, userId, profile.full_name]);
+
+  const devotionalKeyExtractor = useCallback((item: DevotionalWithEngagement) => item.id, []);
+
   return (
     <SafeAreaView
       style={[styles.container, { backgroundColor: colors.background }]}
@@ -385,43 +431,19 @@ export const ProfileScreen: React.FC = () => {
               </Text>
             </View>
           ) : (
-            <View style={styles.grid}>
-              {devotionals.map((devotional) => (
-                <TouchableOpacity
-                  key={devotional.id}
-                  style={styles.gridItem}
-                  onPress={() =>
-                    navigation.navigate('UserDevotionalsList', {
-                      userId: userId,
-                      userName: profile.full_name || 'User',
-                      initialDevotionalId: devotional.id,
-                    })
-                  }
-                  activeOpacity={0.9}
-                >
-                  <Image
-                    source={{ uri: devotional.image_url || '' }}
-                    style={styles.gridImage}
-                    resizeMode="cover"
-                  />
-                  {/* Engagement stats in top right */}
-                  <View style={styles.gridOverlay}>
-                    {devotional.likes_count > 0 && (
-                      <View style={styles.gridStat}>
-                        <Ionicons name="heart" size={14} color="#FFFFFF" />
-                        <Text style={styles.gridStatText}>{devotional.likes_count}</Text>
-                      </View>
-                    )}
-                    {devotional.comments_count > 0 && (
-                      <View style={styles.gridStat}>
-                        <Ionicons name="chatbubble" size={14} color="#FFFFFF" />
-                        <Text style={styles.gridStatText}>{devotional.comments_count}</Text>
-                      </View>
-                    )}
-                  </View>
-                </TouchableOpacity>
-              ))}
-            </View>
+            <FlatList
+              data={devotionals}
+              renderItem={renderDevotionalItem}
+              keyExtractor={devotionalKeyExtractor}
+              numColumns={3}
+              scrollEnabled={false}
+              columnWrapperStyle={styles.gridRow}
+              removeClippedSubviews={true}
+              maxToRenderPerBatch={9}
+              initialNumToRender={12}
+              windowSize={5}
+              updateCellsBatchingPeriod={50}
+            />
           )}
         </View>
 
@@ -673,6 +695,9 @@ const styles = StyleSheet.create({
   grid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
+    gap: GRID_GAP,
+  },
+  gridRow: {
     gap: GRID_GAP,
   },
   gridItem: {

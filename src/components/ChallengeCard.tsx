@@ -53,7 +53,7 @@ export const ChallengeCard: React.FC<ChallengeCardProps> = ({ challenge, onPress
               onPress();
             }}
           >
-            <Text style={[styles.viewButtonText, { color: '#FFFFFF' }]}>View</Text>
+            <Text style={[styles.viewButtonText, { color: isDark ? '#FFFFFF' : iconColor }]}>View</Text>
           </TouchableOpacity>
         </View>
       </View>
