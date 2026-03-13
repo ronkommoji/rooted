@@ -64,6 +64,43 @@ describe('useAppStore', () => {
       expect(result.current.isGroupChecked).toBe(false);
     });
 
+    it('should preserve group state when refreshing the session for the same user', () => {
+      const { result } = renderHook(() => useAppStore());
+
+      const initialSession = {
+        access_token: 'old-token',
+        user: { id: 'user-123', email: 'test@example.com' },
+      } as any;
+
+      const refreshedSession = {
+        access_token: 'new-token',
+        user: { id: 'user-123', email: 'test@example.com' },
+      } as any;
+
+      const mockGroup = {
+        id: 'group-123',
+        name: 'Test Group',
+      } as any;
+
+      act(() => {
+        result.current.setSession(initialSession);
+        result.current.setGroupChecked(true);
+        useAppStore.setState({
+          currentGroup: mockGroup,
+          currentUserRole: 'admin',
+        });
+      });
+
+      act(() => {
+        result.current.setSession(refreshedSession);
+      });
+
+      expect(result.current.session).toEqual(refreshedSession);
+      expect(result.current.isGroupChecked).toBe(true);
+      expect(result.current.currentGroup).toEqual(mockGroup);
+      expect(result.current.currentUserRole).toBe('admin');
+    });
+
     it('should set profile', () => {
       const { result } = renderHook(() => useAppStore());
 
@@ -382,6 +419,13 @@ describe('useAppStore', () => {
           };
         }
         if (table === 'group_members') {
+          return {
+            insert: jest.fn().mockResolvedValue({
+              error: null,
+            }),
+          };
+        }
+        if (table === 'challenges') {
           return {
             insert: jest.fn().mockResolvedValue({
               error: null,

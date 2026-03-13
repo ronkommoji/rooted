@@ -62,14 +62,29 @@ export const useAppStore = create<AppState>((set, get) => ({
   preferences: null,
 
   setSession: (session) => {
+    const previousUserId = get().session?.user?.id;
+    const nextUserId = session?.user?.id;
+
     // When session becomes null, mark group as checked (no group to check for)
-    // When session is set, fetchCurrentGroup will be called and set isGroupChecked appropriately
     if (!session) {
-      set({ session, isGroupChecked: true, currentGroup: null, currentUserRole: null });
-    } else {
-      // When setting a new session, reset isGroupChecked so we wait for fetchCurrentGroup
-      set({ session, isGroupChecked: false });
+      set({ session, isGroupChecked: true, currentGroup: null, currentUserRole: null, groupMembers: [] });
+      return;
     }
+
+    // Preserve group state for same-user token refreshes so resume does not reopen the global loading gate.
+    if (previousUserId && previousUserId === nextUserId) {
+      set({ session });
+      return;
+    }
+
+    // New authenticated user/session: clear stale group state and wait for fetchCurrentGroup.
+    set({
+      session,
+      isGroupChecked: false,
+      currentGroup: null,
+      currentUserRole: null,
+      groupMembers: [],
+    });
   },
   setProfile: (profile) => set({ profile }),
   setCurrentGroup: (group) => set({ currentGroup: group }),

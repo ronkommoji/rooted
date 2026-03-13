@@ -151,15 +151,24 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
       // Force loading to false
       setLoading(false);
-      
-      // If there's a session but group check hasn't completed, mark it as checked
-      // This is a safety mechanism - app will show with current state (may need to refetch)
-      const currentSession = useAppStore.getState().session;
-      const isGroupChecked = useAppStore.getState().isGroupChecked;
-      if (currentSession && !isGroupChecked) {
-        console.warn('Force reset: marking group as checked to prevent infinite loading');
-        useAppStore.getState().setGroupChecked(true);
+
+      recoverFromIncompleteGroupCheck(reason);
+    };
+
+    const recoverFromIncompleteGroupCheck = (reason: string) => {
+      const { session: currentSession, isGroupChecked } = useAppStore.getState();
+
+      if (!currentSession || isGroupChecked) {
+        return;
       }
+
+      console.warn(`Recovering incomplete group check: ${reason}`);
+
+      // Unblock navigation with the last known group state, then refresh in background.
+      useAppStore.getState().setGroupChecked(true);
+      fetchCurrentGroup().catch((error) => {
+        console.warn('Failed to refresh group state during recovery:', error);
+      });
     };
 
     // Handle app state changes (foreground/background)
@@ -184,7 +193,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         console.log(`Time in background: ${timeInBackground}ms`);
 
         // IMPORTANT: Get current loading state from store directly, not from closure
-        const currentIsLoading = useAppStore.getState().isLoading;
+        const { isLoading: currentIsLoading, session: currentSession, isGroupChecked: currentIsGroupChecked } =
+          useAppStore.getState();
 
         // If currently loading, reset immediately
         if (currentIsLoading) {
@@ -202,6 +212,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             clearTimeout(authStateChangeTimeout.current);
             authStateChangeTimeout.current = null;
           }
+
+          if (currentSession && !currentIsGroupChecked) {
+            recoverFromIncompleteGroupCheck('returned from long background with incomplete group check');
+          }
         }
 
         // Set up a safety timeout - if we're STILL loading after a few seconds, force reset
@@ -210,9 +224,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           clearTimeout(foregroundSafetyTimeout.current);
         }
         foregroundSafetyTimeout.current = setTimeout(() => {
-          const stillLoading = useAppStore.getState().isLoading;
-          if (stillLoading) {
-            forceResetLoadingState('safety timeout - still loading after foreground');
+          const { isLoading: stillLoading, session: safetySession, isGroupChecked: safetyGroupChecked } =
+            useAppStore.getState();
+
+          if (stillLoading || (safetySession && !safetyGroupChecked)) {
+            forceResetLoadingState('safety timeout - app did not fully recover after foreground');
           }
           foregroundSafetyTimeout.current = null;
         }, foregroundSafetyDelayMs);
@@ -251,6 +267,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       if (isTokenRefresh && sessionUserUnchanged && newSession) {
         console.log('Token refreshed, skipping data refetch (session user unchanged)');
         setSession(newSession);
+        recoverFromIncompleteGroupCheck('token refresh');
         return;
       }
 
