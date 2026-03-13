@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -276,7 +276,13 @@ export const ProfileScreen: React.FC = () => {
 
   const { profile, stats, devotionals, prayers } = profileData;
 
-  const renderDevotionalItem = useCallback(({ item: devotional, index }: { item: DevotionalWithEngagement; index: number }) => {
+  const renderDevotionalItem = ({
+    item: devotional,
+    index,
+  }: {
+    item: DevotionalWithEngagement;
+    index: number;
+  }) => {
     const thumbnailUrl = getImageThumbnail(devotional.image_url, 400);
     return (
       <TouchableOpacity
@@ -317,9 +323,9 @@ export const ProfileScreen: React.FC = () => {
         </View>
       </TouchableOpacity>
     );
-  }, [navigation, userId, profile.full_name]);
+  };
 
-  const devotionalKeyExtractor = useCallback((item: DevotionalWithEngagement) => item.id, []);
+  const devotionalKeyExtractor = (item: DevotionalWithEngagement) => item.id;
 
   return (
     <SafeAreaView

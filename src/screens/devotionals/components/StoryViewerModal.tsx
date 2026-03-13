@@ -4,19 +4,19 @@ import {
   Text,
   StyleSheet,
   Modal,
-  Image,
   Pressable,
   TouchableOpacity,
   Dimensions,
   Animated,
   PanResponder,
   StatusBar,
-  ActivityIndicator,
 } from 'react-native';
+import { Image } from 'expo-image';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { StorySlide } from './StoryRow';
+import { getImageThumbnail } from '../../../lib/imageUtils';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const AUTO_ADVANCE_DELAY = 5000; // 5 seconds
@@ -54,7 +54,6 @@ export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({
   const animationRef = useRef<Animated.CompositeAnimation | null>(null);
   const progressValue = useRef(0);
   const prefetchedUrls = useRef<Set<string>>(new Set());
-  const [imageLoading, setImageLoading] = useState(true);
 
   // Track progress value for pause/resume
   useEffect(() => {
@@ -101,15 +100,6 @@ export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({
   useEffect(() => {
     if (!visible) prefetchedUrls.current = new Set();
   }, [visible]);
-
-  // Reset loading when slide changes; if current slide has no image, clear loading immediately
-  useEffect(() => {
-    if (visible && storySlides.length > 0) {
-      const slide = storySlides[currentIndex];
-      const hasImage = slide?.imageUrl?.trim();
-      setImageLoading(!!hasImage);
-    }
-  }, [visible, currentIndex, storySlides]);
 
   // Prefetch images in priority order: current first, then next/prev, then rest in small batches
   useEffect(() => {
@@ -313,6 +303,10 @@ export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({
     return null;
   }
 
+  const currentSlidePlaceholder = currentSlide.imageUrl
+    ? { uri: getImageThumbnail(currentSlide.imageUrl, 320) || currentSlide.imageUrl }
+    : undefined;
+
   const getInitials = (name: string) => {
     const parts = name.split(' ');
     if (parts.length >= 2) {
@@ -404,36 +398,26 @@ export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({
             <>
               {/* Uploaded image: fit to screen (contain), centered; letterbox is container background */}
               <Image
-                source={{ uri: currentSlide.imageUrl, cache: 'force-cache' }}
+                source={{ uri: currentSlide.imageUrl }}
+                placeholder={currentSlidePlaceholder}
                 style={styles.storyImageContain}
-                resizeMode="contain"
-                onLoadStart={() => setImageLoading(true)}
-                onLoadEnd={() => setImageLoading(false)}
-                onLoad={() => setImageLoading(false)}
+                contentFit="contain"
+                cachePolicy="memory-disk"
+                transition={200}
               />
-              {imageLoading && (
-                <View style={styles.imageLoadingOverlay}>
-                  <ActivityIndicator size="large" color="rgba(255,255,255,0.8)" />
-                </View>
-              )}
             </>
           ) : currentSlide.type === 'daily' ? (
             <View style={styles.textStoryContainer}>
               {currentSlide.imageUrl && (
                 <>
                   <Image
-                    source={{ uri: currentSlide.imageUrl, cache: 'force-cache' }}
+                    source={{ uri: currentSlide.imageUrl }}
+                    placeholder={currentSlidePlaceholder}
                     style={styles.backgroundImage}
-                    resizeMode="cover"
-                    onLoadStart={() => setImageLoading(true)}
-                    onLoadEnd={() => setImageLoading(false)}
-                    onLoad={() => setImageLoading(false)}
+                    contentFit="cover"
+                    cachePolicy="memory-disk"
+                    transition={200}
                   />
-                  {imageLoading && (
-                    <View style={styles.imageLoadingOverlay}>
-                      <ActivityIndicator size="large" color="rgba(255,255,255,0.8)" />
-                    </View>
-                  )}
                 </>
               )}
               {/* Overlay for better text readability */}
@@ -549,12 +533,6 @@ const styles = StyleSheet.create({
   storyImageContain: {
     flex: 1,
     width: SCREEN_WIDTH,
-  },
-  imageLoadingOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: 'rgba(0,0,0,0.3)',
   },
   pauseIndicator: {
     position: 'absolute',

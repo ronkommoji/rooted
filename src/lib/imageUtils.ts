@@ -2,7 +2,7 @@
  * Image optimization utilities for caching and performance
  */
 
-import { Image } from 'react-native';
+import { Image } from 'expo-image';
 
 /**
  * Generates a thumbnail URL from Supabase storage URL

@@ -218,14 +218,15 @@ export const DevotionalsScreen: React.FC = () => {
         </View>
       </ScrollView>
 
-      {/* FAB for adding devotional - show when user can still upload image (even after in-app completion) */}
-      {!currentUserHasImagePost && feedSubmissions.length > 0 && (
+      {/* Floating plus button to open "Add Today's Devotional" modal */}
+      {!isFutureDay && (
         <TouchableOpacity
           style={[styles.fab, { backgroundColor: isDark ? '#3D5A50' : colors.primary }]}
           onPress={() => {
             setShowAddSheet(true);
-            onRefresh(); // Fresh data so hasPostedImageToday is correct (e.g. after delete)
           }}
+          accessibilityRole="button"
+          accessibilityLabel="Add today's devotional"
         >
           <Ionicons name="add" size={28} color="#FFFFFF" />
         </TouchableOpacity>
