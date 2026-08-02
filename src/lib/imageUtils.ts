@@ -4,6 +4,12 @@
 
 import { Image } from 'expo-image';
 
+type ImageTransformOptions = {
+  width?: number;
+  height?: number;
+  quality?: number;
+};
+
 /**
  * Generates a thumbnail URL from Supabase storage URL
  * Supabase uses imgproxy for image transformations
@@ -31,24 +37,32 @@ export const getImageThumbnail = (url: string | null, size: number = 400): strin
 };
 
 /**
- * Adds cache-control parameters to image URLs
- * This helps expo-image cache images more efficiently
+ * Adds image transformation parameters to Supabase storage URLs.
+ * This keeps external image URLs unchanged because they do not support Supabase transforms.
  */
-export const optimizeImageUrl = (url: string | null, options?: {
-  width?: number;
-  quality?: number;
-}): string | null => {
+export const optimizeImageUrl = (
+  url: string | null,
+  options?: ImageTransformOptions
+): string | null => {
   if (!url) return null;
   
   try {
+    if (!url.includes('supabase')) {
+      return url;
+    }
+
     const urlObj = new URL(url);
     
-    // For Supabase URLs, add transformation parameters
     if (options?.width) {
       urlObj.searchParams.set('width', options.width.toString());
-      if (options.width === options?.quality) {
-        urlObj.searchParams.set('height', options.width.toString());
-      }
+    }
+    if (options?.height) {
+      urlObj.searchParams.set('height', options.height.toString());
+    }
+    if (options?.quality) {
+      urlObj.searchParams.set('quality', options.quality.toString());
+    }
+    if (options?.width || options?.height) {
       urlObj.searchParams.set('resize', 'cover');
     }
     
@@ -64,7 +78,7 @@ export const optimizeImageUrl = (url: string | null, options?: {
 export const optimizeDevotionalImages = (devotionals: Array<{ image_url: string | null; id: string }>) => {
   return devotionals.map(d => ({
     ...d,
-    image_url: optimizeImageUrl(d.image_url, { width: 400, quality: 80 }),
+    image_url: optimizeImageUrl(d.image_url, { width: 400, height: 400, quality: 80 }),
   }));
 };
 
